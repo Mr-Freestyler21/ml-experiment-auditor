@@ -8,12 +8,13 @@ Built for the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).
 
 ## Status
 
-Phase 0: repo skeleton and one tool-calling request to the Meta Model API.
+- Phase 0: repo skeleton and one tool-calling request to the Meta Model API.
+- Phase 1 (in progress): F1 demo project reproduces the reported 95% baseline (`demo/f1`).
 
 ## Setup
 
 ```bash
-python -m venv .venv
+py -3.14 -m venv .venv            # Python 3.14; pandas 3.0.1 has no 3.15 wheels yet
 .venv\Scripts\activate          # Windows; use `source .venv/bin/activate` elsewhere
 pip install -r requirements.txt
 copy .env.example .env          # then put your key in .env

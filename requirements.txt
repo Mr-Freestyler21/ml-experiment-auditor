@@ -1,2 +1,6 @@
-# Pinned. Add packages here as each phase needs them.
+# Pinned. Python 3.14 (matches the F1 notebook's environment).
+# Add packages here as each phase needs them.
 openai==3.38.0
+numpy==2.4.3
+pandas==3.0.1
+scikit-learn==1.8.0

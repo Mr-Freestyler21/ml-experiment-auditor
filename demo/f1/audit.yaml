@@ -1,0 +1,16 @@
+entry_script: train.py
+data_path: data/laps.csv
+target: PitNextLap
+reported_metric: accuracy
+reported_value: 0.95
+prediction_time: >-
+  At the end of each lap, predict whether the driver pits on the next lap,
+  using only information known when the current lap ends.
+# Each entry is one column or a list of columns that together identify a group.
+# A race is Year + Race, because the same Grand Prix name appears in both seasons.
+group_columns:
+  - [Year, Race]
+  - [Driver]
+time_column: Year
+random_seed: 42
+timeout_seconds: 600

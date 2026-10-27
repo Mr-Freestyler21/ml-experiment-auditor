@@ -3,7 +3,12 @@
 Wraps scikit-learn's fit / predict / transform methods and train_test_split, then runs
 the audited script unchanged. Every call is logged to $AUDIT_OUTPUT_DIR/trace.jsonl with
 the row labels it saw (the pandas index, i.e. the original CSV row numbers) and the
-script line it came from. Self-contained: it may only import the stdlib and sklearn.
+script line it came from. Self-contained: it may only import the stdlib and sklearn
+(and joblib, which sklearn depends on).
+
+Parallel work (n_jobs=-1) normally runs in worker processes the wrappers cannot see, so
+joblib is forced into sequential mode: same results, all in this process. Work that
+still leaves the process (a hard-coded backend) is logged as a "parallel_escape" event.
 """
 
 import functools
@@ -105,6 +110,31 @@ def _wrap_split(module):
     return train_test_split
 
 
+def _wrap_parallel():
+    from joblib.parallel import Parallel
+
+    original = Parallel.__call__
+
+    @functools.wraps(original)
+    def __call__(self, iterable):
+        result = original(self, iterable)
+        backend = getattr(self, "_backend", None)
+        try:
+            workers = backend.effective_n_jobs(self.n_jobs)
+        except Exception:
+            workers = self.n_jobs
+        if type(backend).__name__ != "SequentialBackend" and workers not in (1, None):
+            _log({
+                "event": "parallel_escape",
+                "backend": type(backend).__name__,
+                "n_jobs": workers,
+                "line": _script_line(),
+            })
+        return result
+
+    Parallel.__call__ = __call__
+
+
 def _install():
     import warnings
 
@@ -130,15 +160,20 @@ def _install():
 
     patched = _wrap_split(sklearn.model_selection._split)
     sklearn.model_selection.train_test_split = patched
+    _wrap_parallel()
 
 
 def main():
+    import joblib
+
     _install()
+    _log({"event": "tracer", "joblib_backend": "sequential (forced)", "joblib_version": joblib.__version__})
     script_dir = os.path.dirname(_script)
     sys.argv = sys.argv[1:]
     sys.path.insert(0, script_dir)
     try:
-        runpy.run_path(_script, run_name="__main__")
+        with joblib.parallel_config(backend="sequential"):
+            runpy.run_path(_script, run_name="__main__")
     finally:
         _trace.close()
 

@@ -18,7 +18,7 @@ from auditor.checks.base import CheckResult
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.config import AuditConfig, ConfigError, load_config
 from auditor.sandbox import Sandbox, default_sandbox
-from auditor.trace import run_traced
+from auditor.trace import compare_metrics, run_traced
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,20 +53,32 @@ def _baseline(config: AuditConfig, sandbox: Sandbox) -> int:
 
 
 def _check(config: AuditConfig, sandbox: Sandbox) -> int:
-    print(f"Running {config.entry_script} in the sandbox with call tracing...")
+    print(f"Running {config.entry_script} in the sandbox as-is...")
+    plain = run_baseline(config, sandbox)
+    if plain.status == "failed":
+        print(f"Run failed: {plain.error}. See {plain.log_dir}", file=sys.stderr)
+        return 1
+    print(f"Running {config.entry_script} again with call tracing...")
     traced = run_traced(config, sandbox)
     if traced.error:
         print(f"Run failed: {traced.error}. See {traced.run.log_dir}", file=sys.stderr)
         return 1
+
+    same = compare_metrics(plain.metrics, traced.metrics)
+    print(f"Tracing changed the results: {'no' if same['match'] else 'YES ' + json.dumps(same['differences'])}")
     print(f"Traced {len(traced.events)} calls; found {len(traced.splits)} train/test evaluation(s).")
     for split in traced.splits:
         print(
             f"  {split.model}: fit at line {split.fit_line} on {split.n_train} rows, "
             f"{'/'.join(split.predict_methods)} at line {split.predict_line} on {split.n_test} rows"
         )
+    incomplete = traced.incomplete_reason
+    if not same["match"]:
+        incomplete = "the traced run's metrics differ from the plain run, so the trace may not describe the same experiment"
 
     data = pd.read_csv(config.project_dir / config.data_path)
-    result = check_group_overlap(data, traced.splits, config.group_columns, config.time_column)
+    result = check_group_overlap(data, traced.splits, config.group_columns, config.time_column, incomplete)
+    (traced.run.log_dir / "metrics_comparison.json").write_text(json.dumps(same, indent=2), encoding="utf-8")
     (traced.run.log_dir / f"check_{result.check_id}.json").write_text(
         json.dumps(result.to_json(), indent=2, default=str), encoding="utf-8"
     )

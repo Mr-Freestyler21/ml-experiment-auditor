@@ -28,9 +28,13 @@ def check_group_overlap(
     splits: Sequence[EvaluationSplit],
     group_columns: Sequence[Sequence[str]],
     time_column: str | None,
+    incomplete_reason: str | None = None,
 ) -> CheckResult:
+    """`incomplete_reason` is set when the trace may have missed calls; the check then refuses to judge."""
     if not group_columns and not time_column:
         return _result("not_applicable", "No group_columns or time_column configured, so there is nothing to compare.")
+    if incomplete_reason:
+        return _result("not_applicable", f"Trace incomplete: {incomplete_reason}.")
     if not splits:
         return _result("not_applicable", "No model was fitted with labels and then evaluated, so no train/test split was found.")
     if not all(s.has_row_identity for s in splits):

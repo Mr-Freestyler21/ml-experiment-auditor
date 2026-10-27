@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -6,8 +7,8 @@ import pytest
 
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.config import load_config
-from auditor.sandbox import LocalSandbox
-from auditor.trace import extract_splits, run_traced
+from auditor.sandbox import LocalSandbox, collect_files
+from auditor.trace import compare_metrics, extract_splits, run_traced
 
 
 def call(seq, obj, method, rows=None, has_y=False, cls="M", depth=0, line=1):
@@ -92,6 +93,15 @@ open(os.path.join(os.environ['AUDIT_OUTPUT_DIR'], 'metrics.json'), 'w').write(js
 """
 
 
+PARALLEL_CV = GROUP_KFOLD.replace("cv=GroupKFold(n_splits=4))", "cv=GroupKFold(n_splits=4), n_jobs=-1)")
+
+# A script that insists on worker processes, overriding the tracer's sequential setting.
+HARD_CODED_PROCESSES = GROUP_KFOLD.replace(
+    "scores = cross_val_score(",
+    "import joblib\nwith joblib.parallel_config(backend='loky'):\n    scores = cross_val_score(",
+).replace("cv=GroupKFold(n_splits=4))", "cv=GroupKFold(n_splits=4), n_jobs=2)")
+
+
 @pytest.fixture
 def sandbox(tmp_path: Path) -> LocalSandbox:
     return LocalSandbox(python=Path(sys.executable), runs_dir=tmp_path / "runs")
@@ -111,7 +121,8 @@ def run_check(project: Path, sandbox: LocalSandbox):
     traced = run_traced(config, sandbox)
     assert traced.error is None, traced.run.stderr
     data = pd.read_csv(project / "data.csv")
-    return traced, check_group_overlap(data, traced.splits, config.group_columns, config.time_column)
+    result = check_group_overlap(data, traced.splits, config.group_columns, config.time_column, traced.incomplete_reason)
+    return traced, result
 
 
 def test_random_split_is_traced_and_flagged(sandbox, tmp_path):
@@ -130,6 +141,39 @@ def test_group_kfold_is_traced_per_fold_and_clear(sandbox, tmp_path):
     assert all(s.n_train == 30 and s.n_test == 10 for s in traced.splits)
     assert result.status == "clear"
     assert result.measurements["splits_checked"] == 4
+
+
+def test_n_jobs_minus_one_is_traced_in_process(sandbox, tmp_path):
+    traced, result = run_check(make_project(tmp_path / "p", PARALLEL_CV), sandbox)
+
+    assert len(traced.splits) == 4
+    assert traced.incomplete_reason is None
+    assert result.status == "clear"
+
+
+def test_hard_coded_worker_processes_make_the_check_refuse_to_judge(sandbox, tmp_path):
+    traced, result = run_check(make_project(tmp_path / "p", HARD_CODED_PROCESSES), sandbox)
+
+    assert "LokyBackend" in traced.incomplete_reason
+    assert result.status == "not_applicable"
+    assert result.summary.startswith("Trace incomplete")
+
+
+def test_tracing_does_not_change_results(sandbox, tmp_path):
+    project = make_project(tmp_path / "p", RANDOM_SPLIT)
+    config = load_config(project)
+
+    plain = sandbox.run(["python", "train.py"], files=collect_files(project), timeout=60)
+    traced = run_traced(config, sandbox)
+
+    plain_metrics = json.loads(plain.artifacts["metrics.json"].read_text())
+    assert compare_metrics(plain_metrics, traced.metrics)["match"]
+
+
+def test_compare_metrics_reports_differences():
+    assert compare_metrics({"accuracy": 0.9}, {"accuracy": 0.9}) == {"match": True, "differences": {}}
+    assert compare_metrics({"accuracy": 0.9}, {"accuracy": 0.8})["differences"] == {"accuracy": [0.9, 0.8]}
+    assert compare_metrics({"accuracy": 0.9}, None)["match"] is False
 
 
 def test_project_files_are_left_untouched(sandbox, tmp_path):

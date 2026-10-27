@@ -39,7 +39,33 @@ class TracedRun:
     run: SandboxResult
     events: list[dict[str, Any]]
     splits: list[EvaluationSplit]
+    metrics: dict[str, Any] | None
     error: str | None
+
+    @property
+    def incomplete_reason(self) -> str | None:
+        """Why the trace may be missing calls, or None if it saw everything."""
+        escapes = [e for e in self.events if e.get("event") == "parallel_escape"]
+        if not escapes:
+            return None
+        first = escapes[0]
+        return (
+            f"{len(escapes)} parallel job(s) ran outside the traced process "
+            f"(backend {first['backend']} with {first['n_jobs']} workers, line {first.get('line')}), "
+            "so some fit/predict calls were not seen"
+        )
+
+
+def compare_metrics(plain: dict[str, Any], traced: dict[str, Any] | None) -> dict[str, Any]:
+    """Check that running under the tracer did not change the experiment's results."""
+    if traced is None:
+        return {"match": False, "differences": {}, "note": "the traced run wrote no metrics.json"}
+    differences = {
+        key: [plain.get(key), traced.get(key)]
+        for key in sorted(set(plain) | set(traced))
+        if plain.get(key) != traced.get(key)
+    }
+    return {"match": not differences, "differences": differences}
 
 
 def run_traced(config: AuditConfig, sandbox: Sandbox) -> TracedRun:
@@ -57,7 +83,12 @@ def run_traced(config: AuditConfig, sandbox: Sandbox) -> TracedRun:
     else:
         error = None
     events = read_events(trace_path) if trace_path else []
-    return TracedRun(run=run, events=events, splits=extract_splits(events), error=error)
+    metrics_path = run.artifacts.get("metrics.json")
+    try:
+        metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path else None
+    except json.JSONDecodeError:
+        metrics = None
+    return TracedRun(run=run, events=events, splits=extract_splits(events), metrics=metrics, error=error)
 
 
 def read_events(path: Path) -> list[dict[str, Any]]:

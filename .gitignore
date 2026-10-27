@@ -1,8 +1,10 @@
 .env
 .venv/
+.sandbox-venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+runs/
 benchmark/results/*
 !benchmark/results/.gitkeep
 

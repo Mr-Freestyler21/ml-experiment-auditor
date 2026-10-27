@@ -1,0 +1,4 @@
+# Packages available to audited code inside the sandbox. Pinned to the F1 notebook's versions.
+numpy==2.4.3
+pandas==3.0.1
+scikit-learn==1.8.0

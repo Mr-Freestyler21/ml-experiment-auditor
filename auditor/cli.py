@@ -16,6 +16,7 @@ import pandas as pd
 from auditor.baseline import TOLERANCE, BaselineResult, run_baseline
 from auditor.checks.base import CheckResult
 from auditor.checks.group_overlap import check_group_overlap
+from auditor.checks.preprocessing import check_preprocessing
 from auditor.config import AuditConfig, ConfigError, load_config
 from auditor.sandbox import Sandbox, default_sandbox
 from auditor.trace import compare_metrics, run_traced
@@ -77,12 +78,17 @@ def _check(config: AuditConfig, sandbox: Sandbox) -> int:
         incomplete = "the traced run's metrics differ from the plain run, so the trace may not describe the same experiment"
 
     data = pd.read_csv(config.project_dir / config.data_path)
-    result = check_group_overlap(data, traced.splits, config.group_columns, config.time_column, incomplete)
+    results = [
+        check_preprocessing(traced.events, traced.splits, incomplete),
+        check_group_overlap(data, traced.splits, config.group_columns, config.time_column, incomplete),
+    ]
     (traced.run.log_dir / "metrics_comparison.json").write_text(json.dumps(same, indent=2), encoding="utf-8")
-    (traced.run.log_dir / f"check_{result.check_id}.json").write_text(
-        json.dumps(result.to_json(), indent=2, default=str), encoding="utf-8"
-    )
-    _print_check(result)
+    for result in results:
+        (traced.run.log_dir / f"check_{result.check_id}.json").write_text(
+            json.dumps(result.to_json(), indent=2, default=str), encoding="utf-8"
+        )
+        _print_check(result)
+    print()
     print(f"Evidence:  {traced.run.log_dir}")
     return 0
 
@@ -116,6 +122,8 @@ def _print_check(result: CheckResult) -> None:
         for g in split.get("groups", []):
             for ex in g["examples"][:3]:
                 print(f"    e.g. {ex['group']}: {ex['train_rows']} train rows, {ex['test_rows']} test rows")
+    for leak in result.evidence.get("leaks", [])[1:4]:
+        print(f"    also: {leak['class']}.{leak['method']} at line {leak['line']} ({leak['kind']})")
 
 
 if __name__ == "__main__":

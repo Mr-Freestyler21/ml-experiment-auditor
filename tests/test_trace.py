@@ -51,6 +51,37 @@ def test_refitting_the_same_object_starts_a_new_split():
     assert [s.test_rows for s in extract_splits(events)] == [[2], [3]]
 
 
+def split_event(seq, train_rows, test_rows, line=5):
+    return {"event": "split", "seq": seq, "line": line, "outputs": [
+        {"n_rows": len(train_rows), "rows": train_rows}, {"n_rows": len(test_rows), "rows": test_rows}]}
+
+
+def numpy_call(seq, obj, method, n, has_y=False):
+    return {**call(seq, obj, method, has_y=has_y), "n_rows": n}
+
+
+def test_rows_lost_to_numpy_are_recovered_from_the_matching_split_call():
+    events = [
+        split_event(1, [0, 1, 2], [3]),
+        numpy_call(2, 9, "fit", 3, has_y=True),
+        numpy_call(3, 9, "predict", 1),
+    ]
+
+    [s] = extract_splits(events)
+
+    assert (s.train_rows, s.test_rows) == ([0, 1, 2], [3])
+    assert s.rows_source == "train_test_split at line 5"
+
+
+def test_rows_are_not_recovered_when_sizes_do_not_match():
+    events = [split_event(1, [0, 1], [2, 3]), numpy_call(2, 9, "fit", 3, has_y=True), numpy_call(3, 9, "predict", 1)]
+
+    [s] = extract_splits(events)
+
+    assert not s.has_row_identity
+    assert s.rows_source == "model_inputs"
+
+
 def test_unsupervised_fits_and_unevaluated_models_give_no_split():
     events = [call(1, 1, "fit", rows=[0, 1]), call(2, 2, "fit", rows=[0, 1], has_y=True)]
 

@@ -16,10 +16,11 @@ import json
 import os
 import runpy
 import sys
+import weakref
 
 METHODS = ("fit", "fit_transform", "transform", "predict", "predict_proba", "decision_function", "score")
 
-_state = {"depth": 0, "seq": 0}
+_state = {"depth": 0, "seq": 0, "next_obj": 0}
 _script = os.path.abspath(sys.argv[1])
 _trace = open(os.path.join(os.environ["AUDIT_OUTPUT_DIR"], "trace.jsonl"), "w", encoding="utf-8")
 
@@ -56,9 +57,31 @@ def _size(data):
         return None
 
 
-def _wrap_method(cls, name):
-    original = cls.__dict__[name]
+_object_ids = weakref.WeakKeyDictionary()
 
+
+def _obj_id(obj):
+    """A number unique to this object for the whole run (id() is reused after garbage collection)."""
+    try:
+        if obj not in _object_ids:
+            _state["next_obj"] += 1
+            _object_ids[obj] = _state["next_obj"]
+        return _object_ids[obj]
+    except TypeError:
+        return id(obj)
+
+
+def _wrap_method(cls, name):
+    attr = cls.__dict__[name]
+    if callable(attr):
+        setattr(cls, name, _make_wrapper(attr, name))
+    elif callable(getattr(attr, "fn", None)):
+        # sklearn's available_if descriptor (Pipeline.predict, Pipeline.score, ...): wrap the
+        # function inside it so the "only if the last step supports it" check still works.
+        attr.fn = _make_wrapper(attr.fn, name)
+
+
+def _make_wrapper(original, name):
     @functools.wraps(original)
     def wrapper(self, *args, **kwargs):
         X = args[0] if args else kwargs.get("X")
@@ -75,7 +98,7 @@ def _wrap_method(cls, name):
             "event": "call",
             "class": type(self).__name__,
             "method": name,
-            "obj": id(self),
+            "obj": _obj_id(self),
             "depth": depth,
             "line": line,
             # False when sklearn itself made the call (metrics, cross-validation helpers).
@@ -88,7 +111,7 @@ def _wrap_method(cls, name):
         })
         return result
 
-    setattr(cls, name, wrapper)
+    return wrapper
 
 
 def _wrap_split(module):
@@ -155,7 +178,7 @@ def _install():
                 defining.add(parent)
     for cls in defining:
         for name in METHODS:
-            if name in cls.__dict__ and callable(cls.__dict__[name]):
+            if name in cls.__dict__:
                 _wrap_method(cls, name)
 
     patched = _wrap_split(sklearn.model_selection._split)

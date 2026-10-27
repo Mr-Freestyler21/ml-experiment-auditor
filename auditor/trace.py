@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,12 @@ class EvaluationSplit:
     predict_methods: tuple[str, ...]
     n_train: int | None
     n_test: int | None
+    # Trace sequence numbers, so other calls can be placed before or after this evaluation.
+    fit_seq: int | None = None
+    predict_seq: int | None = None
+    model_obj: int | None = None
+    # Where the row labels came from: the model's own inputs, or recovered from a split call.
+    rows_source: str = "model_inputs"
 
     @property
     def has_row_identity(self) -> bool:
@@ -129,6 +135,9 @@ def extract_splits(events: list[dict[str, Any]]) -> list[EvaluationSplit]:
                 predict_methods=tuple(dict.fromkeys(p["method"] for p in group)),
                 n_train=fit.get("n_rows"),
                 n_test=first.get("n_rows"),
+                fit_seq=fit.get("seq"),
+                predict_seq=first.get("seq"),
+                model_obj=fit.get("obj"),
             ))
 
     for call in calls:
@@ -141,4 +150,30 @@ def extract_splits(events: list[dict[str, Any]]) -> list[EvaluationSplit]:
             predictions[obj].append(call)
     for obj in list(open_fits):
         close(obj)
-    return splits
+    return [_recover_rows(s, events) for s in splits]
+
+
+def _recover_rows(split: EvaluationSplit, events: list[dict[str, Any]]) -> EvaluationSplit:
+    """Fill in row labels lost to numpy (e.g. a model fitted on scaler.transform(X_train)).
+
+    Uses the latest train_test_split before the fit whose first two outputs (X_train,
+    X_test) have exactly the model's train and test sizes and carry row labels.
+    """
+    if split.has_row_identity:
+        return split
+    candidates = [
+        e for e in events
+        if e.get("event") == "split" and split.fit_seq is not None and e["seq"] < split.fit_seq
+        and len(e.get("outputs", [])) >= 2
+        and e["outputs"][0]["n_rows"] == split.n_train and e["outputs"][1]["n_rows"] == split.n_test
+        and e["outputs"][0]["rows"] is not None and e["outputs"][1]["rows"] is not None
+    ]
+    if not candidates:
+        return split
+    source = max(candidates, key=lambda e: e["seq"])
+    return replace(
+        split,
+        train_rows=split.train_rows if split.train_rows is not None else source["outputs"][0]["rows"],
+        test_rows=split.test_rows if split.test_rows is not None else source["outputs"][1]["rows"],
+        rows_source=f"train_test_split at line {source.get('line')}",
+    )

@@ -184,6 +184,7 @@ def _split_ref(split: EvaluationSplit) -> dict[str, Any]:
         "predict_methods": list(split.predict_methods),
         "n_train": split.n_train,
         "n_test": split.n_test,
+        "rows_source": split.rows_source,
     }
 
 

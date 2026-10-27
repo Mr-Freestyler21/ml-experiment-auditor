@@ -6,11 +6,11 @@ reported_value: 0.95
 prediction_time: >-
   At the end of each lap, predict whether the driver pits on the next lap,
   using only information known when the current lap ends.
-# Each entry is one column or a list of columns that together identify a group.
-# A race is Year + Race, because the same Grand Prix name appears in both seasons.
+# Entities that will be new when the model is used, so they must not appear in both
+# train and test. A race is Year + Race, because the same Grand Prix name appears in
+# both seasons. Drivers are not listed: the model is used on the same drivers in new races.
 group_columns:
   - [Year, Race]
-  - [Driver]
 time_column: Year
 random_seed: 42
 timeout_seconds: 600

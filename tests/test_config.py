@@ -28,7 +28,7 @@ def test_loads_f1_demo_config():
 
     assert config.target == "PitNextLap"
     assert config.reported_value == 0.95
-    assert config.group_columns == (("Year", "Race"), ("Driver",))
+    assert config.group_columns == (("Year", "Race"),)
     assert config.time_column == "Year"
     assert config.random_seed == 42
 

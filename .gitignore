@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+benchmark/results/*
+!benchmark/results/.gitkeep
+
+# Local working notes, not part of the project
+CLAUDE.md

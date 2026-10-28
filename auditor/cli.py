@@ -3,6 +3,7 @@
   python -m auditor.cli baseline demo/f1
   python -m auditor.cli check demo/f1            # rules + Meta model suspects (if a key is set)
   python -m auditor.cli check demo/f1 --no-llm   # rules only
+  python -m auditor.cli audit demo/f1            # the Meta model investigates with the checks as tools
 """
 
 from __future__ import annotations
@@ -10,11 +11,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from auditor.agent.llm_client import meta_client_from_env
+from auditor.agent.loop import DEFAULT_MAX_STEPS, AgentResult, run_agent
+from auditor.agent.tools import load_session
 from auditor.baseline import TOLERANCE, BaselineResult, run_baseline
 from auditor.checks.base import CheckResult
 from auditor.checks.future_info import check_future_info, feature_power, llm_suspects, rules_suspects
@@ -35,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
     check = commands.add_parser("check", help="run the deterministic leakage checks on a project")
     check.add_argument("project", type=Path, help="folder containing audit.yaml")
     check.add_argument("--no-llm", action="store_true", help="rules only: do not ask the Meta model for suspects")
+    audit = commands.add_parser("audit", help="full audit: the Meta model investigates using the checks as tools")
+    audit.add_argument("project", type=Path, help="folder containing audit.yaml")
+    audit.add_argument("--max-tokens", type=int, help="token cap for this audit (default: AUDITOR_MAX_TOKENS)")
+    audit.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS, help="maximum model turns")
     args = parser.parse_args(argv)
 
     try:
@@ -47,7 +55,59 @@ def main(argv: list[str] | None = None) -> int:
     sandbox = default_sandbox(REPO_ROOT)
     if args.command == "baseline":
         return _baseline(config, sandbox)
+    if args.command == "audit":
+        return _audit(config, sandbox, args.max_tokens, args.max_steps)
     return _check(config, sandbox, use_llm=not args.no_llm)
+
+
+def _audit(config: AuditConfig, sandbox: Sandbox, max_tokens: int | None, max_steps: int) -> int:
+    client = meta_client_from_env(REPO_ROOT)
+    if client is None:
+        print("META_MODEL_API_KEY is not set (in .env or the environment).", file=sys.stderr)
+        return 2
+    if max_tokens:
+        client.budget.cap = max_tokens
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    audit_dir = REPO_ROOT / "runs" / f"audit-{stamp}"
+    print(f"Auditing {config.project_dir.name} with {client.model} (max {max_steps} steps, "
+          f"{client.budget.cap} tokens). Transcript: {audit_dir}")
+    result = run_agent(load_session(config, sandbox), client, audit_dir, max_steps=max_steps, on_event=_show_event)
+    _print_verdict(result)
+    return 0 if result.stopped_because == "finalized" else 1
+
+
+def _show_event(kind: str, data: dict) -> None:
+    if kind == "model":
+        if data["text"].strip():
+            print(f"\n[{data['step']}] Muse: {data['text'].strip()[:400]}")
+        for call in data["tool_calls"]:
+            args = json.dumps(call["arguments"], default=str)
+            print(f"[{data['step']}] -> {call['name']}({args[:160]})")
+    elif kind == "tool":
+        r = data["result"]
+        brief = r.get("error") or r.get("summary") or r.get("status") or (
+            f"accepted={r['accepted']} {r.get('problems', '')}" if "accepted" in r else "")
+        if data["name"] == "run_with_split" and "metrics" in r:
+            brief = f"metrics={json.dumps(r['metrics'])[:200]} change={r.get('change_vs_baseline')}"
+        if data["name"] == "run_baseline":
+            brief = f"{r.get('status')}: measured {r.get('measured')}"
+        print(f"     {r.get('evidence_id', '')} {str(brief)[:300]}")
+    elif kind == "stopped":
+        print(f"\nStopped: {data['reason']}")
+
+
+def _print_verdict(result: AgentResult) -> None:
+    v = result.verdict
+    print("\n" + "=" * 72)
+    print(f"VERDICT: {v['verdict'].upper()}   ({result.stopped_because}, {result.steps} steps, {result.duration_s}s)")
+    print(v["summary"])
+    for f in v.get("findings", []):
+        print(f"\n  Finding [{f['family']}] {f['title']}  {f['evidence_ids']}\n    {f['explanation']}")
+    for c in v.get("caveats", []):
+        print(f"\n  Caveat {c['evidence_ids']}: {c['text']}")
+    u = result.usage
+    print(f"\nModel usage: {u['calls']} calls, {u['tokens']} tokens, est. ${u['est_cost_usd']:.4f}")
+    print(f"Evidence and transcript: {result.audit_dir}")
 
 
 def _baseline(config: AuditConfig, sandbox: Sandbox) -> int:

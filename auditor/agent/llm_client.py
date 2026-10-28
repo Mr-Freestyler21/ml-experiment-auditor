@@ -165,6 +165,7 @@ class ScriptedLLMClient(LLMClient):
         self.requests: list[dict[str, Any]] = []
 
     def respond(self, **request: Any) -> LLMResponse:
+        self.budget.max_output_for_next_call()  # enforce the cap exactly like the real client
         self.requests.append(request)
         if not self._responses:
             raise RuntimeError("ScriptedLLMClient ran out of responses")

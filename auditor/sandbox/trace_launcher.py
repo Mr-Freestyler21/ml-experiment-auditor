@@ -123,21 +123,81 @@ def _columns(data):
 
 def _wrap_split(module):
     original = module.train_test_split
+    override = json.loads(os.environ["AUDIT_SPLIT_OVERRIDE"]) if os.environ.get("AUDIT_SPLIT_OVERRIDE") else None
 
     @functools.wraps(original)
     def train_test_split(*arrays, **options):
-        outputs = original(*arrays, **options)
+        if override is None:
+            outputs = original(*arrays, **options)
+        else:
+            outputs = _override_split(arrays, options, override)
         _log({
             "event": "split",
             "function": "train_test_split",
             "line": _script_line(),
             "options": {k: v for k, v in options.items() if isinstance(v, (int, float, str, bool, type(None)))},
+            "override": override,
             "outputs": [{"n_rows": _size(o), "rows": _rows(o)} for o in outputs],
         })
         return outputs
 
     module.train_test_split = train_test_split
     return train_test_split
+
+
+def _override_split(arrays, options, spec):
+    """Replace the script's split with the one in `spec`, on the same arrays.
+
+    spec: {"strategy": "random" | "group" | "temporal", "data_path": ..., "group_columns": [...],
+           "time_column": ..., "test_size": float | None, "seed": int, "restrict": {"column", "value"} | None}
+    Group and time values are looked up in the data file by the first array's row labels.
+    """
+    import numpy as np
+    import pandas as pd
+    from sklearn.model_selection import GroupShuffleSplit
+
+    first = arrays[0]
+    if not hasattr(first, "index"):
+        raise RuntimeError("AUDIT_SPLIT_OVERRIDE needs the first array to be a pandas object with row labels")
+    meta = pd.read_csv(spec["data_path"]).loc[first.index]
+    positions = np.arange(len(first))
+    restrict = spec.get("restrict")
+    if restrict:
+        positions = positions[(meta[restrict["column"]].astype(str) == str(restrict["value"])).to_numpy()]
+    test_size = spec.get("test_size") or options.get("test_size") or 0.25
+    if isinstance(test_size, int):
+        test_size = test_size / len(first)
+    seed = spec.get("seed", 0)
+    strategy = spec["strategy"]
+    sub = meta.iloc[positions]
+
+    if strategy == "random":
+        shuffled = np.random.default_rng(seed).permutation(positions)
+        n_test = int(round(test_size * len(positions)))
+        test_pos, train_pos = shuffled[:n_test], shuffled[n_test:]
+    elif strategy == "group":
+        keys = sub[spec["group_columns"]].astype(str).agg(" | ".join, axis=1).to_numpy()
+        splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
+        train_idx, test_idx = next(splitter.split(positions, groups=keys))
+        train_pos, test_pos = positions[train_idx], positions[test_idx]
+    elif strategy == "temporal":
+        times = sub[spec["time_column"]].to_numpy()
+        cutoff = None
+        for value in sorted(set(times.tolist()), reverse=True):
+            cutoff = value
+            if (times >= value).mean() >= test_size:
+                break
+        test_mask = times >= cutoff
+        train_pos, test_pos = positions[~test_mask], positions[test_mask]
+    else:
+        raise RuntimeError(f"unknown split strategy {strategy!r}")
+
+    train_pos, test_pos = np.sort(train_pos), np.sort(test_pos)
+    outputs = []
+    for a in arrays:
+        for pos in (train_pos, test_pos):
+            outputs.append(a.iloc[pos] if hasattr(a, "iloc") else np.asarray(a)[pos])
+    return outputs
 
 
 def _wrap_parallel():

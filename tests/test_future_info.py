@@ -156,7 +156,19 @@ def test_suspect_without_effect_is_clear(tmp_path, sandbox):
     )
 
     assert result.status == "clear"
-    assert result.evidence["shuffle_reruns"][0]["depends_on_column"] is False
+    assert result.evidence["shuffle_reruns"][0]["dependence"] == "none"
+
+
+@pytest.mark.parametrize("drop, power, expected", [
+    (0.01, 0.6, "none"),     # below the minimum drop
+    (0.0255, 0.54, "weak"),  # the F1 case: 0.0255 of a 0.143 margin, weak alone
+    (0.08, 0.6, "strong"),   # more than half the margin
+    (0.03, 0.95, "strong"),  # near-perfect on its own
+])
+def test_dependence_strength(drop, power, expected):
+    from auditor.checks.future_info import dependence_strength
+
+    assert dependence_strength(drop, power, baseline=0.952, chance=0.809) == expected
 
 
 def test_no_suspects_means_no_reruns(tmp_path, sandbox):

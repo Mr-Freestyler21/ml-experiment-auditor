@@ -6,8 +6,12 @@ Suspects come from two sources, kept apart so the benchmark can compare them:
   - llm: the model reads column names, a few example values and the prediction_time
     sentence, and names columns that would not be known at that moment, with a reason.
 Code then measures each suspect: its single-feature power, and a shuffle rerun that
-scrambles that one column in a copy of the data and reruns the script unchanged. A
-suspect is flagged only when the rerun shows the reported metric depends on it.
+scrambles that one column in a copy of the data and reruns the script unchanged.
+
+Any useful feature costs some score when shuffled, so dependence alone is not leakage.
+A suspect is flagged only when the dependence is strong: shuffling it removes at least
+half of the model's margin above chance, or it predicts the target almost perfectly on
+its own. Weaker dependence is reported, not flagged.
 """
 
 from __future__ import annotations
@@ -35,6 +39,8 @@ MIN_METRIC_DROP = 0.02
 # Single-feature power at or above this is "near-perfect separability".
 NEAR_PERFECT_POWER = 0.98
 RULES_POWER_THRESHOLD = 0.90
+# Strong dependence: the shuffle removes at least this share of the margin above chance.
+STRONG_SHARE_OF_MARGIN = 0.5
 MAX_RERUNS = 3
 FUTURE_WORDS = re.compile(r"(next|future|after|final|result|outcome|label|target|later|leak|post_|_post)", re.I)
 
@@ -235,6 +241,8 @@ def check_future_info(
     if not by_column:
         return _result("clear", "No feature was suspected of being unavailable at prediction time.", evidence=evidence)
 
+    chance = chance_level(config.reported_metric, data[config.target])
+    evidence["chance_level"] = chance
     ranked = sorted(by_column, key=lambda c: -(power.get(c) or 0))
     findings, skipped = [], ranked[max_reruns:]
     for col in ranked[:max_reruns]:
@@ -249,7 +257,8 @@ def check_future_info(
             "baseline": baseline,
             "shuffled": shuffled_value,
             "metric_drop": drop,
-            "depends_on_column": drop is not None and drop >= MIN_METRIC_DROP,
+            "margin_above_chance": round(float(baseline) - chance, 4) if chance is not None else None,
+            "dependence": dependence_strength(drop, power.get(col), float(baseline), chance),
             "error": error,
             "log_dir": str(log_dir),
         })
@@ -257,7 +266,8 @@ def check_future_info(
     if skipped:
         evidence["not_rerun"] = skipped
 
-    flagged = [f for f in findings if f["depends_on_column"]]
+    flagged = [f for f in findings if f["dependence"] == "strong"]
+    weak = [f for f in findings if f["dependence"] == "weak"]
     if flagged:
         worst = max(flagged, key=lambda f: f["metric_drop"])
         summary = (
@@ -269,20 +279,43 @@ def check_future_info(
     if all(f["error"] for f in findings):
         return _result("error", "Every shuffle rerun failed, so no suspect could be measured.", evidence=evidence)
     names = ", ".join(f"'{f['column']}'" for f in findings)
-    return _result(
-        "clear",
-        f"Suspected column(s) {names} were measured; shuffling them changed {config.reported_metric} by less than "
-        f"{MIN_METRIC_DROP}, so the reported result does not depend on them.",
-        measurements=_measurements(findings),
-        evidence=evidence,
-    )
+    summary = f"Suspected column(s) {names} were measured and none shows the strong dependence a leak would cause."
+    for f in weak:
+        summary += (
+            f" Shuffling '{f['column']}' costs {f['metric_drop']:.4f} of a {f['margin_above_chance']:.4f} margin above "
+            "chance: modest, as for a useful feature. Whether its value is available in time cannot be shown from the "
+            "data alone."
+        )
+    return _result("clear", summary, measurements=_measurements(findings), evidence=evidence)
+
+
+def chance_level(metric: str, target: pd.Series) -> float | None:
+    """The score of a model that learned nothing: the majority rate for accuracy, 0.5 for ROC-AUC."""
+    if metric == "accuracy":
+        return round(float(target.value_counts(normalize=True).iloc[0]), 4)
+    if metric in ("roc_auc", "auc"):
+        return 0.5
+    return None
+
+
+def dependence_strength(drop: float | None, power: float | None, baseline: float, chance: float | None) -> str:
+    """'none', 'weak' or 'strong'. Only strong dependence is consistent with a leak."""
+    if drop is None or drop < MIN_METRIC_DROP:
+        return "none"
+    if power is not None and power >= RULES_POWER_THRESHOLD:
+        return "strong"
+    margin = baseline - chance if chance is not None else None
+    if margin is None or margin <= 0:
+        return "strong" if drop >= 0.1 else "weak"
+    return "strong" if drop >= STRONG_SHARE_OF_MARGIN * margin else "weak"
 
 
 def _measurements(findings: list[dict[str, Any]]) -> dict[str, Any]:
     drops = [f["metric_drop"] for f in findings if f["metric_drop"] is not None]
     return {
         "suspects_measured": len(findings),
-        "suspects_with_dependence": sum(f["depends_on_column"] for f in findings),
+        "suspects_with_strong_dependence": sum(f["dependence"] == "strong" for f in findings),
+        "suspects_with_weak_dependence": sum(f["dependence"] == "weak" for f in findings),
         "max_metric_drop": max(drops) if drops else None,
     }
 

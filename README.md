@@ -14,6 +14,8 @@ Built for the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).
 - Phase 2: call tracing and the three deterministic checks: A (preprocessing fitted on test
   rows), B (future information in features, with Meta model suspects) and C (group and time
   overlap).
+- Phase 3: the agent loop. The Meta model investigates with the checks as tools, measures
+  corrected splits, and submits a verdict that code validates.
 
 ## Setup
 
@@ -61,6 +63,19 @@ on it. Use `--no-llm` for the rules-only baseline.
 **Data note:** with Meta Model API free credits, content sent to the model may be used by Meta
 for product improvement. The auditor sends column names, three example values per column and
 the `prediction_time` sentence. Only audit projects you are comfortable sharing.
+
+## Run a full audit
+
+```bash
+python -m auditor.cli audit demo/f1 --max-tokens 100000
+```
+
+The Meta model (Muse) reads the project, runs the checks, and re-evaluates the unchanged
+script with corrected splits (`run_with_split` swaps its `train_test_split` for a grouped,
+temporal or single-period split). It then submits a verdict: `confirmed`, `not_found` or
+`inconclusive`. Code validates the verdict before accepting it: every claim must cite
+evidence ids, `confirmed` needs a flagged check, and every number in the text must appear
+in a tool result. The transcript, evidence and verdict are saved under `runs/audit-<time>/`.
 
 ## Tests
 

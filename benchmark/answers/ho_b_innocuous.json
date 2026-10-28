@@ -1,0 +1,44 @@
+{
+  "id": "ho_b_innocuous",
+  "split": "heldout",
+  "theme": "energy",
+  "clean": false,
+  "flaws": [
+    {
+      "family": "B",
+      "taxonomy": "L2",
+      "taxonomy_name": "Model uses features that are not legitimate",
+      "description": "reading_q is a near-copy of the label under a meaningless name"
+    }
+  ],
+  "families": [
+    "B"
+  ],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.9433333333333334,
+  "correct_metric": 0.7333333333333333,
+  "correct_script": "import json\nimport os\nimport pandas as pd\n\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score\n\n# Predict high_usage for the energy data.\ndf = pd.read_csv('data.csv')\nfeatures = ['temperature_avg', 'occupancy', 'floor_area', 'usage_last_month', 'insulation_index']\nX = df[features + ['building_type']]\nX = pd.get_dummies(X, columns=['building_type'], drop_first=True, dtype=float)\ny = df['high_usage']\ncutoff = df['month'].quantile(0.75)\nis_train = df['month'] <= cutoff\nX_train, X_test = X[is_train], X[~is_train]\ny_train, y_test = y[is_train], y[~is_train]\nmodel = RandomForestClassifier(n_estimators=150, random_state=0)\nmodel.fit(X_train, y_train)\npred = model.predict(X_test)\nproba = model.predict_proba(X_test)[:, 1]\nrate = float(y_test.mean())\nmetrics = {\n    'accuracy': float(accuracy_score(y_test, pred)),\n    'precision': float(precision_score(y_test, pred, zero_division=0)),\n    'recall': float(recall_score(y_test, pred)),\n    'roc_auc': float(roc_auc_score(y_test, proba)),\n    'majority_class_accuracy': max(rate, 1 - rate),\n}\n\nout = os.environ.get('AUDIT_OUTPUT_DIR', '.')\nwith open(os.path.join(out, 'metrics.json'), 'w') as f:\n    json.dump(metrics, f, indent=2)\nprint(json.dumps(metrics))\n",
+  "note": "",
+  "spec": {
+    "id": "ho_b_innocuous",
+    "split": "heldout",
+    "theme": "energy",
+    "seed": 9002,
+    "evaluation": "auto",
+    "preprocess": "none",
+    "leak": "innocuous",
+    "encoding": "dummies",
+    "model": "rf",
+    "strong": false,
+    "missing": false,
+    "flaws": [
+      {
+        "family": "B",
+        "taxonomy": "L2",
+        "taxonomy_name": "Model uses features that are not legitimate",
+        "description": "reading_q is a near-copy of the label under a meaningless name"
+      }
+    ],
+    "note": ""
+  }
+}

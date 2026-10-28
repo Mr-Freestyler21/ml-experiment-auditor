@@ -1,0 +1,10 @@
+entry_script: train.py
+data_path: data.csv
+target: churned
+reported_metric: accuracy
+reported_value: 0.8
+prediction_time: At the start of each week, predict whether the customer churns that week, using only
+  information from earlier weeks. The same customers are scored every week.
+time_column: week
+random_seed: 0
+timeout_seconds: 300

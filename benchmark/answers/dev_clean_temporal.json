@@ -1,0 +1,28 @@
+{
+  "id": "dev_clean_temporal",
+  "split": "dev",
+  "theme": "churn",
+  "clean": true,
+  "flaws": [],
+  "families": [],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.759090909090909,
+  "correct_metric": 0.759090909090909,
+  "correct_script": null,
+  "note": "",
+  "spec": {
+    "id": "dev_clean_temporal",
+    "split": "dev",
+    "theme": "churn",
+    "seed": 112,
+    "evaluation": "auto",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "rf",
+    "strong": false,
+    "missing": false,
+    "flaws": [],
+    "note": ""
+  }
+}

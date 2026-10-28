@@ -1,0 +1,4 @@
+SHA-256 of the held-out answer keys (benchmark/answers/ho_*.json), recorded before the auditor
+was run on them. Recompute with: python -m benchmark.generate --verify-lock
+
+d4a94c7dde4590ad92c1fa34f00bb192becc6cedfcd0bd585642472d63e502f2

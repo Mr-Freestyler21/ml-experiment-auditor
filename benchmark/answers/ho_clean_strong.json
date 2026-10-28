@@ -1,0 +1,28 @@
+{
+  "id": "ho_clean_strong",
+  "split": "heldout",
+  "theme": "energy",
+  "clean": true,
+  "flaws": [],
+  "families": [],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.7566666666666667,
+  "correct_metric": 0.7566666666666667,
+  "correct_script": null,
+  "note": "Clean, but usage_last_month legitimately predicts the label strongly.",
+  "spec": {
+    "id": "ho_clean_strong",
+    "split": "heldout",
+    "theme": "energy",
+    "seed": 9006,
+    "evaluation": "auto",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "rf",
+    "strong": true,
+    "missing": false,
+    "flaws": [],
+    "note": "Clean, but usage_last_month legitimately predicts the label strongly."
+  }
+}

@@ -1,0 +1,10 @@
+entry_script: train.py
+data_path: data.csv
+target: failure_next_day
+reported_metric: accuracy
+reported_value: 0.76
+prediction_time: At the end of each day, predict whether the machine fails the next day, using only readings
+  up to and including that day. The same machines are monitored every day.
+time_column: day
+random_seed: 0
+timeout_seconds: 300

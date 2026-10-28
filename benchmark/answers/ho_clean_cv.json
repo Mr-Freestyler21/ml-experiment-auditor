@@ -1,0 +1,28 @@
+{
+  "id": "ho_clean_cv",
+  "split": "heldout",
+  "theme": "students",
+  "clean": true,
+  "flaws": [],
+  "families": [],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.6672222222222223,
+  "correct_metric": 0.6672222222222223,
+  "correct_script": null,
+  "note": "",
+  "spec": {
+    "id": "ho_clean_cv",
+    "split": "heldout",
+    "theme": "students",
+    "seed": 9005,
+    "evaluation": "cv_group",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "lr",
+    "strong": false,
+    "missing": false,
+    "flaws": [],
+    "note": ""
+  }
+}

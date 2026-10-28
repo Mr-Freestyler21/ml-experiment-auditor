@@ -1,0 +1,28 @@
+{
+  "id": "dev_clean_label_encoder",
+  "split": "dev",
+  "theme": "churn",
+  "clean": true,
+  "flaws": [],
+  "families": [],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.7954545454545454,
+  "correct_metric": 0.7954545454545454,
+  "correct_script": null,
+  "note": "Clean: LabelEncoder fitted on all rows only learns category names.",
+  "spec": {
+    "id": "dev_clean_label_encoder",
+    "split": "dev",
+    "theme": "churn",
+    "seed": 114,
+    "evaluation": "auto",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "label_encoder_all",
+    "model": "rf",
+    "strong": false,
+    "missing": false,
+    "flaws": [],
+    "note": "Clean: LabelEncoder fitted on all rows only learns category names."
+  }
+}

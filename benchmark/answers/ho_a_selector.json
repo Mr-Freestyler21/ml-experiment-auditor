@@ -1,0 +1,44 @@
+{
+  "id": "ho_a_selector",
+  "split": "heldout",
+  "theme": "students",
+  "clean": false,
+  "flaws": [
+    {
+      "family": "A",
+      "taxonomy": "L1.3",
+      "taxonomy_name": "Feature selection on training and test set",
+      "description": "SelectKBest fitted with labels on all rows before the split"
+    }
+  ],
+  "families": [
+    "A"
+  ],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.6822222222222222,
+  "correct_metric": 0.5577777777777778,
+  "correct_script": "import json\nimport os\nimport pandas as pd\n\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.feature_selection import SelectKBest, f_classif\nfrom sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score\nfrom sklearn.model_selection import GroupShuffleSplit\n\n# Predict passed_exam for the students data.\ndf = pd.read_csv('data.csv')\nfeatures = ['attendance', 'homework_score', 'prior_grade', 'hours_study', 'school_funding_index']\nX = df[features + ['track']]\nX = pd.get_dummies(X, columns=['track'], drop_first=True, dtype=float)\ny = df['passed_exam']\nsplitter = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=0)\ntrain_idx, test_idx = next(splitter.split(X, y, groups=df['school_id']))\nX_train, X_test = X.iloc[train_idx], X.iloc[test_idx]\ny_train, y_test = y.iloc[train_idx], y.iloc[test_idx]\nselector = SelectKBest(f_classif, k=5).fit(X_train, y_train)\nX_train = pd.DataFrame(selector.transform(X_train), index=X_train.index)\nX_test = pd.DataFrame(selector.transform(X_test), index=X_test.index)\nmodel = RandomForestClassifier(n_estimators=150, random_state=0)\nmodel.fit(X_train, y_train)\npred = model.predict(X_test)\nproba = model.predict_proba(X_test)[:, 1]\nrate = float(y_test.mean())\nmetrics = {\n    'accuracy': float(accuracy_score(y_test, pred)),\n    'precision': float(precision_score(y_test, pred, zero_division=0)),\n    'recall': float(recall_score(y_test, pred)),\n    'roc_auc': float(roc_auc_score(y_test, proba)),\n    'majority_class_accuracy': max(rate, 1 - rate),\n}\n\nout = os.environ.get('AUDIT_OUTPUT_DIR', '.')\nwith open(os.path.join(out, 'metrics.json'), 'w') as f:\n    json.dump(metrics, f, indent=2)\nprint(json.dumps(metrics))\n",
+  "note": "",
+  "spec": {
+    "id": "ho_a_selector",
+    "split": "heldout",
+    "theme": "students",
+    "seed": 9001,
+    "evaluation": "auto",
+    "preprocess": "selector_before",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "rf",
+    "strong": false,
+    "missing": false,
+    "flaws": [
+      {
+        "family": "A",
+        "taxonomy": "L1.3",
+        "taxonomy_name": "Feature selection on training and test set",
+        "description": "SelectKBest fitted with labels on all rows before the split"
+      }
+    ],
+    "note": ""
+  }
+}

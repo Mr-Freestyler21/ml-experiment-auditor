@@ -1,0 +1,44 @@
+{
+  "id": "dev_c_groups",
+  "split": "dev",
+  "theme": "hospital",
+  "clean": false,
+  "flaws": [
+    {
+      "family": "C",
+      "taxonomy": "L3.2",
+      "taxonomy_name": "Non-independence between train and test samples",
+      "description": "random split puts the same patients in train and test"
+    }
+  ],
+  "families": [
+    "C"
+  ],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.75,
+  "correct_metric": 0.675,
+  "correct_script": "import json\nimport os\nimport pandas as pd\n\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score\nfrom sklearn.model_selection import GroupShuffleSplit\n\n# Predict readmitted_30d for the hospital data.\ndf = pd.read_csv('data.csv')\nfeatures = ['age', 'num_prior_visits', 'length_of_stay', 'lab_glucose', 'home_distance_km']\nX = df[features + ['ward']]\nX = pd.get_dummies(X, columns=['ward'], drop_first=True, dtype=float)\ny = df['readmitted_30d']\nsplitter = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=0)\ntrain_idx, test_idx = next(splitter.split(X, y, groups=df['patient_id']))\nX_train, X_test = X.iloc[train_idx], X.iloc[test_idx]\ny_train, y_test = y.iloc[train_idx], y.iloc[test_idx]\nmodel = RandomForestClassifier(n_estimators=150, random_state=0)\nmodel.fit(X_train, y_train)\npred = model.predict(X_test)\nproba = model.predict_proba(X_test)[:, 1]\nrate = float(y_test.mean())\nmetrics = {\n    'accuracy': float(accuracy_score(y_test, pred)),\n    'precision': float(precision_score(y_test, pred, zero_division=0)),\n    'recall': float(recall_score(y_test, pred)),\n    'roc_auc': float(roc_auc_score(y_test, proba)),\n    'majority_class_accuracy': max(rate, 1 - rate),\n}\n\nout = os.environ.get('AUDIT_OUTPUT_DIR', '.')\nwith open(os.path.join(out, 'metrics.json'), 'w') as f:\n    json.dump(metrics, f, indent=2)\nprint(json.dumps(metrics))\n",
+  "note": "",
+  "spec": {
+    "id": "dev_c_groups",
+    "split": "dev",
+    "theme": "hospital",
+    "seed": 108,
+    "evaluation": "random",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "rf",
+    "strong": false,
+    "missing": false,
+    "flaws": [
+      {
+        "family": "C",
+        "taxonomy": "L3.2",
+        "taxonomy_name": "Non-independence between train and test samples",
+        "description": "random split puts the same patients in train and test"
+      }
+    ],
+    "note": ""
+  }
+}

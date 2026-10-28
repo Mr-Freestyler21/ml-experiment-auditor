@@ -1,0 +1,11 @@
+entry_script: train.py
+data_path: data.csv
+target: readmitted_30d
+reported_metric: accuracy
+reported_value: 0.7
+prediction_time: At discharge, predict whether the patient is readmitted within 30 days, using only information
+  known at discharge. Patients in real use are new patients.
+group_columns:
+- patient_id
+random_seed: 0
+timeout_seconds: 300

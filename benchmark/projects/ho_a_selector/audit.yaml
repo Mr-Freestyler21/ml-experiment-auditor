@@ -1,0 +1,11 @@
+entry_script: train.py
+data_path: data.csv
+target: passed_exam
+reported_metric: accuracy
+reported_value: 0.68
+prediction_time: Before the final exam, predict whether a student passes, using coursework so far. The
+  model will be used at schools it has not seen.
+group_columns:
+- school_id
+random_seed: 0
+timeout_seconds: 300

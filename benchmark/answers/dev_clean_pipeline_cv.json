@@ -1,0 +1,28 @@
+{
+  "id": "dev_clean_pipeline_cv",
+  "split": "dev",
+  "theme": "hospital",
+  "clean": true,
+  "flaws": [],
+  "families": [],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.71171875,
+  "correct_metric": 0.71171875,
+  "correct_script": null,
+  "note": "",
+  "spec": {
+    "id": "dev_clean_pipeline_cv",
+    "split": "dev",
+    "theme": "hospital",
+    "seed": 110,
+    "evaluation": "cv_group",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "lr",
+    "strong": false,
+    "missing": false,
+    "flaws": [],
+    "note": ""
+  }
+}

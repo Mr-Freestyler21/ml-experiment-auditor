@@ -1,0 +1,44 @@
+{
+  "id": "dev_c_time",
+  "split": "dev",
+  "theme": "machines",
+  "clean": false,
+  "flaws": [
+    {
+      "family": "C",
+      "taxonomy": "L3.1",
+      "taxonomy_name": "Temporal leakage",
+      "description": "random split trains on days after the test days"
+    }
+  ],
+  "families": [
+    "C"
+  ],
+  "metric": "accuracy",
+  "reported_metric_exact": 0.7816666666666666,
+  "correct_metric": 0.72,
+  "correct_script": "import json\nimport os\nimport pandas as pd\n\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score\n\n# Predict failure_next_day for the machines data.\ndf = pd.read_csv('data.csv')\nfeatures = ['temperature', 'vibration', 'load_pct', 'hours_since_service', 'machine_age', 'ambient_temp']\nX = df[features + ['line']]\nX = pd.get_dummies(X, columns=['line'], drop_first=True, dtype=float)\ny = df['failure_next_day']\ncutoff = df['day'].quantile(0.75)\nis_train = df['day'] <= cutoff\nX_train, X_test = X[is_train], X[~is_train]\ny_train, y_test = y[is_train], y[~is_train]\nmodel = RandomForestClassifier(n_estimators=150, random_state=0)\nmodel.fit(X_train, y_train)\npred = model.predict(X_test)\nproba = model.predict_proba(X_test)[:, 1]\nrate = float(y_test.mean())\nmetrics = {\n    'accuracy': float(accuracy_score(y_test, pred)),\n    'precision': float(precision_score(y_test, pred, zero_division=0)),\n    'recall': float(recall_score(y_test, pred)),\n    'roc_auc': float(roc_auc_score(y_test, proba)),\n    'majority_class_accuracy': max(rate, 1 - rate),\n}\n\nout = os.environ.get('AUDIT_OUTPUT_DIR', '.')\nwith open(os.path.join(out, 'metrics.json'), 'w') as f:\n    json.dump(metrics, f, indent=2)\nprint(json.dumps(metrics))\n",
+  "note": "",
+  "spec": {
+    "id": "dev_c_time",
+    "split": "dev",
+    "theme": "machines",
+    "seed": 109,
+    "evaluation": "random",
+    "preprocess": "none",
+    "leak": "none",
+    "encoding": "dummies",
+    "model": "rf",
+    "strong": false,
+    "missing": false,
+    "flaws": [
+      {
+        "family": "C",
+        "taxonomy": "L3.1",
+        "taxonomy_name": "Temporal leakage",
+        "description": "random split trains on days after the test days"
+      }
+    ],
+    "note": ""
+  }
+}

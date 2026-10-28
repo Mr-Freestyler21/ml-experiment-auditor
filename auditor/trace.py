@@ -76,11 +76,21 @@ def compare_metrics(plain: dict[str, Any], traced: dict[str, Any] | None) -> dic
     return {"match": not differences, "differences": differences}
 
 
-def run_traced(config: AuditConfig, sandbox: Sandbox, split_override: dict[str, Any] | None = None) -> TracedRun:
-    """Run the script under the tracer. `split_override` swaps its train_test_split (see trace_launcher)."""
+def run_traced(
+    config: AuditConfig,
+    sandbox: Sandbox,
+    split_override: dict[str, Any] | None = None,
+    file_overrides: dict[str, Path] | None = None,
+) -> TracedRun:
+    """Run the script under the tracer.
+
+    `split_override` swaps its train_test_split (see trace_launcher); `file_overrides`
+    replaces project files in the sandbox copy (a patched script), never the originals.
+    """
     files = collect_files(config.project_dir)
     if LAUNCHER_NAME in files:
         raise ValueError(f"project already contains a file named {LAUNCHER_NAME}")
+    files.update(file_overrides or {})
     files[LAUNCHER_NAME] = LAUNCHER_SOURCE
     env = {}
     if split_override is not None:

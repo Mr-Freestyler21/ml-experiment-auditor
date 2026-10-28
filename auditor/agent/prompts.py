@@ -21,7 +21,12 @@ How to work:
    Be careful with confounds: a temporal split can change the label distribution, so compare
    the target rates and majority-class baselines that run_with_split reports. To isolate
    group leakage, compare a random split with a group split on the SAME restricted data.
-5. Call finalize.
+5. When a flaw is confirmed, propose_patch a minimal fix to the evaluation only (for example
+   a grouped split such as sklearn's GroupShuffleSplit). Keep the model, its settings and the
+   features unchanged. Copy each 'old' text exactly from read_file, without line numbers.
+   If a patch is rejected, read the problems and try again. Then run_patched and check that
+   the flagged check is now clear.
+6. Call finalize. Cite the run_patched result for the corrected evaluation.
 
 Rules:
 - Every number you write must come from a tool result. Do not calculate differences or

@@ -44,8 +44,9 @@ def run_agent(
     on_event: Any = None,
 ) -> AgentResult:
     """Run one audit. `on_event(kind, data)` is called for progress output (optional)."""
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    transcript = (audit_dir / "transcript.jsonl").open("w", encoding="utf-8")
+    evidence_dir = audit_dir / "evidence"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    transcript = (evidence_dir / "transcript.jsonl").open("w", encoding="utf-8")
     emit = on_event or (lambda kind, data: None)
     start = time.perf_counter()
 
@@ -55,8 +56,9 @@ def run_agent(
         transcript.flush()
         emit(kind, data)
 
-    next_input: str | list[dict[str, Any]] = prompts.task_message(session.config)
-    previous_id: str | None = None
+    # We keep the whole conversation ourselves and send it every turn. The server's own
+    # memory (previous_response_id) can expire mid-audit, which ends the audit.
+    history: list[dict[str, Any]] = [{"role": "user", "content": prompts.task_message(session.config)}]
     stopped_because = "max_steps"
     steps = 0
     try:
@@ -66,9 +68,8 @@ def run_agent(
             try:
                 response = client.respond(
                     instructions=prompts.SYSTEM,
-                    input=next_input,
+                    input=list(history),
                     tools=TOOL_SCHEMAS,
-                    previous_response_id=previous_id,
                     reasoning_effort="medium",
                     purpose=f"agent_step_{steps}",
                 )
@@ -80,7 +81,7 @@ def run_agent(
                 stopped_because = "model_error"
                 log("stopped", {"reason": f"{type(exc).__name__}: {exc}"})
                 break
-            previous_id = response.id
+            history += response.history_items()
             log("model", {"step": steps, "text": response.text, "tool_calls": [
                 {"name": c.name, "arguments": c.arguments if c.arguments is not None else c.raw_arguments}
                 for c in response.tool_calls
@@ -88,19 +89,17 @@ def run_agent(
 
             # 2. No tool call: remind it to use tools or finalize.
             if not response.tool_calls:
-                next_input = [{"role": "user", "content": prompts.NUDGE}]
+                history.append({"role": "user", "content": prompts.NUDGE})
                 continue
 
-            # 3. Run every requested tool; send all results back together, in order.
-            outputs = []
+            # 3. Run every requested tool; add all results to the history, in call order.
             for call in response.tool_calls:
                 result = session.call(call.name, call.arguments if call.error is None else None)
                 log("tool", {"step": steps, "name": call.name, "result": result})
-                outputs.append({"type": "function_call_output", "call_id": call.call_id, "output": to_json_text(result)})
+                history.append({"type": "function_call_output", "call_id": call.call_id, "output": to_json_text(result)})
             if session.final is not None:
                 stopped_because = "finalized"
                 break
-            next_input = outputs
     finally:
         transcript.close()
 
@@ -120,8 +119,8 @@ def run_agent(
         audit_dir=audit_dir,
         evidence=evidence,
     )
-    (audit_dir / "evidence.json").write_text(json.dumps(evidence, indent=2, default=str), encoding="utf-8")
-    (audit_dir / "verdict.json").write_text(json.dumps({
+    (evidence_dir / "evidence.json").write_text(json.dumps(evidence, indent=2, default=str), encoding="utf-8")
+    (evidence_dir / "verdict.json").write_text(json.dumps({
         "verdict": verdict,
         "stopped_because": stopped_because,
         "steps": steps,

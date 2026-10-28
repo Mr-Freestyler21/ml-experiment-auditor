@@ -20,6 +20,7 @@ from auditor.checks.future_info import Suspect, check_future_info, feature_power
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.checks.preprocessing import check_preprocessing
 from auditor.config import AuditConfig
+from auditor.patching import Patch, PatchError, make_patch
 from auditor.sandbox import Sandbox, collect_files
 from auditor.trace import TracedRun, compare_metrics, run_traced
 
@@ -44,7 +45,9 @@ class AuditSession:
     config: AuditConfig
     sandbox: Sandbox
     data: pd.DataFrame
+    work_dir: Path  # where patched copies and diffs are written (never the project folder)
     evidence: list[EvidenceItem] = field(default_factory=list)
+    patches: dict[str, Patch] = field(default_factory=dict)
     final: dict[str, Any] | None = None
     _plain: BaselineResult | None = None
     _traced: TracedRun | None = None
@@ -134,6 +137,7 @@ def _run_baseline(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
         "environment": b.environment,
         "duration_s": b.duration_s,
         "error": b.error,
+        "log_dir": str(b.log_dir),
     }
 
 
@@ -231,6 +235,7 @@ def _run_with_split(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
         "baseline_" + metric: baseline,
         "change_vs_baseline": round(value - baseline, 4) if isinstance(value, (int, float)) and baseline else None,
         "evaluations": [_describe_split(s, sp) for sp in traced.splits[:MAX_LIST_ITEMS]],
+        "log_dir": str(traced.run.log_dir),
     }
 
 
@@ -255,6 +260,76 @@ def _describe_split(s: AuditSession, split: Any) -> dict[str, Any]:
     return out
 
 
+def _propose_patch(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
+    path = args.get("path") or s.config.entry_script
+    files = collect_files(s.config.project_dir)
+    if path not in files:
+        raise ToolArgumentError(f"no such file in the project: {path!r}")
+    models = sorted({sp.model for sp in s.traced().splits})
+    patch_id = f"P{len(s.patches) + 1}"
+    try:
+        patch = make_patch(patch_id, path, files[path], args.get("edits") or [], str(args.get("rationale", "")), models)
+    except PatchError as exc:
+        return {"accepted": False, "problems": exc.problems}
+    s.patches[patch_id] = patch
+    s.work_dir.mkdir(parents=True, exist_ok=True)
+    (s.work_dir / f"patch_{patch_id}.diff").write_text(patch.diff, encoding="utf-8")
+    return {
+        "accepted": True,
+        "patch_id": patch_id,
+        "lines_changed": patch.lines_changed,
+        "protected_model_calls": models,
+        "diff": patch.diff,
+    }
+
+
+def _run_patched(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
+    patch = s.patches.get(str(args.get("patch_id")))
+    if patch is None:
+        raise ToolArgumentError(f"unknown patch_id {args.get('patch_id')!r}; accepted patches: {sorted(s.patches)}")
+    s.work_dir.mkdir(parents=True, exist_ok=True)
+    patched_file = s.work_dir / f"patched_{patch.id}_{Path(patch.path).name}"
+    patched_file.write_text(patch.patched, encoding="utf-8")
+
+    traced = run_traced(s.config, s.sandbox, file_overrides={patch.path: patched_file})
+    if traced.error:
+        return {"patch_id": patch.id, "error": f"patched run failed: {traced.error}",
+                "stderr_tail": traced.run.stderr[-800:]}
+    metric = s.config.reported_metric
+    baseline = s.plain().metrics.get(metric)
+    value = (traced.metrics or {}).get(metric)
+    incomplete = traced.incomplete_reason
+    return {
+        "patch_id": patch.id,
+        "metrics": traced.metrics,
+        "baseline_" + metric: baseline,
+        "change_vs_baseline": round(value - baseline, 4) if isinstance(value, (int, float)) and baseline else None,
+        "evaluations": [_describe_split(s, sp) for sp in traced.splits[:MAX_LIST_ITEMS]],
+        "checks_after_patch": {
+            "A": check_preprocessing(traced.events, traced.splits, incomplete).status,
+            **_check_c_parts(check_group_overlap(
+                s.data, traced.splits, s.config.group_columns, s.config.time_column, incomplete
+            )),
+        },
+        "log_dir": str(traced.run.log_dir),
+    }
+
+
+def _check_c_parts(result: CheckResult) -> dict[str, str]:
+    """Check C's two questions answered separately: shared groups, and training on later data."""
+    splits = [sp for sp in result.evidence.get("splits", []) if isinstance(sp, dict)]
+    if result.status not in ("flagged", "clear") or not splits:
+        return {"C": result.status}
+    parts = {}
+    if any(sp.get("groups") for sp in splits):
+        shared = any(g["shared_groups"] > 0 for sp in splits for g in sp.get("groups", []))
+        parts["C_groups"] = "flagged" if shared else "clear"
+    if any(sp.get("time") for sp in splits):
+        later = any(sp["time"]["test_rows_before_train_end"] > 0 for sp in splits if sp.get("time"))
+        parts["C_time"] = "flagged" if later else "clear"
+    return parts
+
+
 def _finalize(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
     from auditor.agent.verdict import validate_verdict
 
@@ -272,6 +347,8 @@ TOOL_HANDLERS: dict[str, Callable[[AuditSession, dict[str, Any]], dict[str, Any]
     "run_check": _run_check,
     "run_ablation": _run_ablation,
     "run_with_split": _run_with_split,
+    "propose_patch": _propose_patch,
+    "run_patched": _run_patched,
     "finalize": _finalize,
 }
 
@@ -329,6 +406,30 @@ TOOL_SCHEMAS = [
                             "required": ["column", "value"]},
         },
         ["strategy"],
+    ),
+    _tool(
+        "propose_patch",
+        "Propose a minimal fix to the EVALUATION only (e.g. a grouped split); the model and its settings must not "
+        "change. Give exact text replacements: each 'old' must be copied exactly from read_file output WITHOUT the "
+        "line-number prefix and must occur once. Code applies them to a copy, checks the result compiles and leaves "
+        "the model untouched, and returns the unified diff and a patch_id.",
+        {
+            "path": {"type": "string", "description": "File to patch; default is the entry script."},
+            "edits": {
+                "type": "array",
+                "items": {"type": "object", "properties": {"old": {"type": "string"}, "new": {"type": "string"}},
+                          "required": ["old", "new"]},
+            },
+            "rationale": {"type": "string"},
+        },
+        ["edits", "rationale"],
+    ),
+    _tool(
+        "run_patched",
+        "Run the patched copy in the sandbox under tracing. Returns its metrics, the change versus the baseline, "
+        "target rates and majority baseline, and the status of checks A and C on the patched run.",
+        {"patch_id": {"type": "string"}},
+        ["patch_id"],
     ),
     _tool(
         "finalize",
@@ -394,5 +495,6 @@ def _require_choice(args: dict[str, Any], key: str, choices: tuple[str, ...]) ->
     return value
 
 
-def load_session(config: AuditConfig, sandbox: Sandbox) -> AuditSession:
-    return AuditSession(config=config, sandbox=sandbox, data=pd.read_csv(Path(config.project_dir) / config.data_path))
+def load_session(config: AuditConfig, sandbox: Sandbox, work_dir: Path) -> AuditSession:
+    data = pd.read_csv(Path(config.project_dir) / config.data_path)
+    return AuditSession(config=config, sandbox=sandbox, data=data, work_dir=Path(work_dir))

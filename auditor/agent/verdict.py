@@ -54,7 +54,7 @@ def validate_verdict(verdict: dict[str, Any], evidence: Sequence[EvidenceItem]) 
     if v in ("not_found", "inconclusive") and findings:
         problems.append(f"{v} must have no findings; move observations to caveats")
     if v == "not_found":
-        missing = [fam for fam in FAMILIES if not any(_is_check(e, fam) and "error" not in e.result for e in evidence)]
+        missing = [fam for fam in FAMILIES if not any(_is_check(e, fam) and not e.result.get("error") for e in evidence)]
         if missing:
             problems.append(f"not_found needs checks A, B and C all run without error; missing: {missing}")
 

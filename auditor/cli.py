@@ -25,6 +25,7 @@ from auditor.checks.future_info import check_future_info, feature_power, llm_sus
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.checks.preprocessing import check_preprocessing
 from auditor.config import AuditConfig, ConfigError, load_config
+from auditor.report import write_report
 from auditor.sandbox import Sandbox, default_sandbox
 from auditor.trace import TracedRun, compare_metrics, run_traced
 
@@ -71,8 +72,11 @@ def _audit(config: AuditConfig, sandbox: Sandbox, max_tokens: int | None, max_st
     audit_dir = REPO_ROOT / "runs" / f"audit-{stamp}"
     print(f"Auditing {config.project_dir.name} with {client.model} (max {max_steps} steps, "
           f"{client.budget.cap} tokens). Transcript: {audit_dir}")
-    result = run_agent(load_session(config, sandbox), client, audit_dir, max_steps=max_steps, on_event=_show_event)
+    session = load_session(config, sandbox, work_dir=audit_dir / "evidence")
+    result = run_agent(session, client, audit_dir, max_steps=max_steps, on_event=_show_event)
     _print_verdict(result)
+    report = write_report(session, result, client.model)
+    print(f"Report: {report}")
     return 0 if result.stopped_because == "finalized" else 1
 
 
@@ -87,8 +91,13 @@ def _show_event(kind: str, data: dict) -> None:
         r = data["result"]
         brief = r.get("error") or r.get("summary") or r.get("status") or (
             f"accepted={r['accepted']} {r.get('problems', '')}" if "accepted" in r else "")
-        if data["name"] == "run_with_split" and "metrics" in r:
+        if data["name"] in ("run_with_split", "run_patched") and "metrics" in r:
             brief = f"metrics={json.dumps(r['metrics'])[:200]} change={r.get('change_vs_baseline')}"
+            if "checks_after_patch" in r:
+                brief += f" checks after patch={r['checks_after_patch']}"
+        if data["name"] == "propose_patch":
+            brief = (f"accepted as {r['patch_id']} ({r['lines_changed']} lines)" if r.get("accepted")
+                     else f"rejected: {r.get('problems')}")
         if data["name"] == "run_baseline":
             brief = f"{r.get('status')}: measured {r.get('measured')}"
         print(f"     {r.get('evidence_id', '')} {str(brief)[:300]}")

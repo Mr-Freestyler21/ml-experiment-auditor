@@ -16,6 +16,9 @@ Built for the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).
   overlap).
 - Phase 3: the agent loop. The Meta model investigates with the checks as tools, measures
   corrected splits, and submits a verdict that code validates.
+- Phase 4: patch, patched rerun and evidence report. The model proposes a minimal fix to the
+  evaluation; code applies it to a copy, rejects any change to the model, reruns it with the
+  checks, and writes `report.md` / `report.json` with every number taken from the evidence.
 
 ## Setup
 
@@ -75,10 +78,14 @@ script with corrected splits (`run_with_split` swaps its `train_test_split` for 
 temporal or single-period split). It then submits a verdict: `confirmed`, `not_found` or
 `inconclusive`. Code validates the verdict before accepting it: every claim must cite
 evidence ids, `confirmed` needs a flagged check, and every number in the text must appear
-in a tool result. The transcript, evidence and verdict are saved under `runs/audit-<time>/`.
+in a tool result. When a flaw is confirmed, the model proposes a fix as exact text edits; code
+applies them to a copy, checks it compiles and leaves the model's constructor untouched, runs it,
+and re-runs checks A and C on it. The report (`report.md`, `report.json`) and an `evidence/`
+folder (transcript, evidence, verdict, patch diff) are saved under `runs/audit-<time>/`.
 
 ## Tests
 
 ```bash
 python -m pytest -q
+python -m pyflakes auditor tests
 ```

@@ -76,6 +76,15 @@ class LLMResponse:
     text: str
     tool_calls: list[ToolCall]
     usage: dict[str, int]
+    # The raw output items (reasoning, message, function_call), so the caller can keep the
+    # conversation history itself instead of relying on the server to remember it.
+    output_items: list[dict[str, Any]] = field(default_factory=list)
+
+    def history_items(self) -> list[dict[str, Any]]:
+        if self.output_items:
+            return self.output_items
+        return [{"type": "function_call", "call_id": c.call_id, "name": c.name, "arguments": c.raw_arguments}
+                for c in self.tool_calls]
 
 
 class LLMClient(ABC):
@@ -152,7 +161,10 @@ class MetaLLMClient(LLMClient):
             for item in response.output
             if item.type == "function_call"
         ]
-        return LLMResponse(id=response.id, text=response.output_text or "", tool_calls=calls, usage=usage)
+        items = [item.model_dump(exclude_none=True) for item in response.output]
+        return LLMResponse(
+            id=response.id, text=response.output_text or "", tool_calls=calls, usage=usage, output_items=items
+        )
 
 
 class ScriptedLLMClient(LLMClient):

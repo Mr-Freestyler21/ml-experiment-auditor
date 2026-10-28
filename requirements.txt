@@ -2,5 +2,6 @@
 # Add packages here as each phase needs them.
 -r sandbox-requirements.txt
 openai==3.38.0
+pyflakes==4.0.3
 pytest==9.1.1
 PyYAML==6.0.3

@@ -11,8 +11,9 @@ Built for the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).
 - Phase 0: repo skeleton and one tool-calling request to the Meta Model API.
 - Phase 1: sandbox runner (`auditor/sandbox`) and baseline reproduction. The F1 demo reproduces
   its reported 95% accuracy inside the sandbox.
-- Phase 2 (in progress): call tracing, Check A (preprocessing fitted on test rows) and Check C
-  (group and time overlap). Check B next.
+- Phase 2: call tracing and the three deterministic checks: A (preprocessing fitted on test
+  rows), B (future information in features, with Meta model suspects) and C (group and time
+  overlap).
 
 ## Setup
 
@@ -52,7 +53,14 @@ The script runs under a tracer that records which rows every scikit-learn `fit` 
 from groups (`group_columns` in `audit.yaml`) that also appear in training, and whether
 the model was trained on data later than some of its test rows (`time_column`). Check A
 flags scalers, imputers, selectors and similar that were fitted on test rows before the
-evaluation; encoders that only learn category names are noted, not flagged.
+evaluation; encoders that only learn category names are noted, not flagged. Check B asks the
+Meta model which features would not be known at prediction time (plus name and power rules),
+then reruns the script with each suspect column shuffled to measure whether the result depends
+on it. Use `--no-llm` for the rules-only baseline.
+
+**Data note:** with Meta Model API free credits, content sent to the model may be used by Meta
+for product improvement. The auditor sends column names, three example values per column and
+the `prediction_time` sentence. Only audit projects you are comfortable sharing.
 
 ## Tests
 

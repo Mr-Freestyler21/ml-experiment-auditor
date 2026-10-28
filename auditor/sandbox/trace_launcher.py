@@ -108,10 +108,17 @@ def _make_wrapper(original, name):
             # Nested calls (trees inside a forest, steps inside a pipeline) see the same
             # rows as their parent, so only top-level calls store the full row list.
             "rows": _rows(X) if depth == 0 else None,
+            "columns": _columns(X) if depth == 0 and name in ("fit", "fit_transform") else None,
         })
         return result
 
     return wrapper
+
+
+def _columns(data):
+    """Column names if `data` is a pandas DataFrame (the features a model was trained on)."""
+    columns = getattr(data, "columns", None)
+    return [str(c) for c in columns] if columns is not None else None
 
 
 def _wrap_split(module):

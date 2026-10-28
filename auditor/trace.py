@@ -34,6 +34,8 @@ class EvaluationSplit:
     model_obj: int | None = None
     # Where the row labels came from: the model's own inputs, or recovered from a split call.
     rows_source: str = "model_inputs"
+    # Feature column names the model was fitted on, when it was given a DataFrame.
+    features: tuple[str, ...] | None = None
 
     @property
     def has_row_identity(self) -> bool:
@@ -138,6 +140,7 @@ def extract_splits(events: list[dict[str, Any]]) -> list[EvaluationSplit]:
                 fit_seq=fit.get("seq"),
                 predict_seq=first.get("seq"),
                 model_obj=fit.get("obj"),
+                features=tuple(fit["columns"]) if fit.get("columns") else None,
             ))
 
     for call in calls:

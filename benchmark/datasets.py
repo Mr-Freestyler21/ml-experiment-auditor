@@ -150,7 +150,7 @@ def _hospital(rng: np.random.Generator, strong: bool) -> pd.DataFrame:
     age = np.round(rng.uniform(25, 90, size=160))[e]
     stay = rng.gamma(2.0, 2.5, size=len(e))
     glucose = rng.normal(110, 25, size=len(e))
-    prior = t + rng.poisson(1.0, size=len(e))
+    prior = t + rng.poisson(1.0, size=160)[e]  # visits before the first admission, then one more each time
     logit = 0.7 * _z(stay) + 0.5 * _z(glucose) + 0.4 * _z(age) + 1.8 * v
     df = pd.DataFrame({
         "patient_id": [f"P{i:04d}" for i in e], "admission_month": t * 3 + rng.integers(0, 3, size=len(e)),
@@ -158,10 +158,15 @@ def _hospital(rng: np.random.Generator, strong: bool) -> pd.DataFrame:
         "home_distance_km": c, "ward": rng.choice(["cardio", "general", "ortho"], size=len(e)),
     })
     if strong:
-        r = rng.normal(size=len(e))
-        df["num_prior_readmissions"] = np.clip(np.round(3 + 1.6 * r + rng.normal(0, 0.1, len(e))), 0, None)
-        logit = logit * 0.2 + 5.0 * r
+        # Frail patients are readmitted again and again, so a patient's own readmission history
+        # is a strong, legitimate predictor: known at discharge, never above the visit count.
+        frailty = rng.normal(size=160)[e]
+        logit = logit * 0.2 + 3.0 * frailty
     df["readmitted_30d"] = _label(logit, 0.3, rng)
+    if strong:
+        earlier = df.groupby("patient_id")["readmitted_30d"].transform(lambda s: s.shift(1).fillna(0).cumsum())
+        df["num_prior_readmissions"] = earlier.astype(int)
+        df["num_prior_visits"] = np.maximum(df["num_prior_visits"], df["num_prior_readmissions"])
     return df
 
 

@@ -6,8 +6,8 @@
   "flaws": [],
   "families": [],
   "metric": "accuracy",
-  "reported_metric_exact": 0.865625,
-  "correct_metric": 0.865625,
+  "reported_metric_exact": 0.784375,
+  "correct_metric": 0.784375,
   "correct_script": null,
   "note": "Clean, but one legitimate feature predicts the label strongly: bait for false alarms.",
   "spec": {

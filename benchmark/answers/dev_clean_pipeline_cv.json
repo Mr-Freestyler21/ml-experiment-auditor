@@ -6,8 +6,8 @@
   "flaws": [],
   "families": [],
   "metric": "accuracy",
-  "reported_metric_exact": 0.71171875,
-  "correct_metric": 0.71171875,
+  "reported_metric_exact": 0.7109375,
+  "correct_metric": 0.7109375,
   "correct_script": null,
   "note": "",
   "spec": {

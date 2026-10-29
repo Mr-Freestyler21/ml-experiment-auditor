@@ -4,6 +4,7 @@
   python -m auditor.cli check demo/f1            # rules + Meta model suspects (if a key is set)
   python -m auditor.cli check demo/f1 --no-llm   # rules only
   python -m auditor.cli audit demo/f1            # the Meta model investigates with the checks as tools
+  python -m auditor.cli demo [--replay]          # the full demo: F1, then the clean project
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from auditor.checks.future_info import check_future_info, feature_power, llm_sus
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.checks.preprocessing import check_preprocessing
 from auditor.config import AuditConfig, ConfigError, load_config
+from auditor.demo import run_demo
 from auditor.report import write_report
 from auditor.sandbox import Sandbox, default_sandbox
 from auditor.trace import TracedRun, compare_metrics, run_traced
@@ -44,7 +46,14 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("project", type=Path, help="folder containing audit.yaml")
     audit.add_argument("--max-tokens", type=int, help="token cap for this audit (default: AUDITOR_MAX_TOKENS)")
     audit.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS, help="maximum model turns")
+    demo = commands.add_parser("demo", help="audit the F1 project and the clean project, then open both reports")
+    demo.add_argument("--replay", action="store_true", help="replay the recorded audits in examples/ (no API key)")
+    demo.add_argument("--no-open", action="store_true", help="do not open the HTML reports in a browser")
+    demo.add_argument("--delay", type=float, default=0.6, help="seconds between replayed steps")
     args = parser.parse_args(argv)
+
+    if args.command == "demo":
+        return run_demo(REPO_ROOT, replay=args.replay, open_reports=not args.no_open, delay=args.delay)
 
     try:
         config = load_config(args.project)

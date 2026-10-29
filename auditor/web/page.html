@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Experiment Auditor</title>
+<style>
+.app {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --border: rgba(11,11,11,0.10); --accent: #2a78d6; --accent-ink: #fff;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --muse-bg: #eaf2fc; --code-bg: #f3f2ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .app {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --accent: #3987e5; --muse-bg: #16263a; --code-bg: #232321;
+  }
+}
+:root[data-theme="dark"] .app {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --accent: #3987e5; --muse-bg: #16263a; --code-bg: #232321;
+}
+html, body { margin: 0; background: #f9f9f7; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) body { background: #0d0d0d; } }
+:root[data-theme="dark"] body { background: #0d0d0d; }
+.app { background: var(--page); color: var(--ink); min-height: 100vh;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline;
+  gap: 14px; flex-wrap: wrap; }
+header h1 { font-size: 20px; margin: 0; }
+header p { margin: 0; color: var(--ink-2); font-size: 14px; }
+.layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; padding: 20px 24px;
+  max-width: 1400px; margin: 0 auto; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; padding: 16px; } }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 0 0 10px; }
+.project { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 8px;
+  border: 1px solid transparent; cursor: pointer; }
+.project:hover { border-color: var(--border); }
+.project input { margin-top: 4px; }
+.project .title { font-weight: 600; }
+.project .kind { color: var(--muted); font-size: 12px; }
+.buttons { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--ink); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.upload { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--grid); }
+.upload p { color: var(--ink-2); font-size: 13px; margin: 0 0 8px; }
+.note { font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+.msg { font-size: 13px; margin-top: 8px; min-height: 1.4em; }
+.msg.error { color: var(--critical); }
+.timeline { display: flex; flex-direction: column; gap: 10px; }
+.empty { color: var(--muted); padding: 40px 10px; text-align: center; }
+.card { border-radius: 10px; padding: 10px 14px; border: 1px solid var(--border); background: var(--surface); }
+.card.muse { background: var(--muse-bg); }
+.card.muse .who { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
+.card.call { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; color: var(--ink-2);
+  border-style: dashed; }
+.card.result { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.dot { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  font-size: 12px; font-weight: 700; margin-top: 1px; background: var(--muted); }
+.dot.flagged, .dot.error { background: var(--critical); }
+.dot.clear { background: var(--good); }
+.dot.not_applicable { background: var(--muted); }
+.dot.measured { background: var(--accent); }
+.status { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-right: 6px; }
+.banner { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.badge { display: inline-flex; gap: 8px; align-items: center; font-weight: 700; padding: 6px 12px; border-radius: 999px;
+  border: 2px solid var(--tone); white-space: nowrap; }
+.badge .icon { width: 22px; height: 22px; border-radius: 50%; background: var(--tone); color: #fff;
+  display: grid; place-items: center; font-size: 13px; }
+.tone-critical { --tone: var(--critical); } .tone-good { --tone: var(--good); } .tone-warning { --tone: var(--warning); }
+.tone-warning .icon { color: #0b0b0b; }
+.stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 8px; color: var(--ink-2); font-size: 14px; }
+.stats b { color: var(--ink); font-size: 20px; display: block; font-variant-numeric: tabular-nums; }
+iframe { width: 100%; height: 900px; border: 1px solid var(--border); border-radius: 10px; background: var(--page);
+  margin-top: 14px; }
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--grid); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -1px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>ML Experiment Auditor</h1>
+    <p>Muse investigates how your experiment was evaluated. The model reasons, code measures.</p>
+  </header>
+  <div class="layout">
+    <aside>
+      <div class="panel">
+        <h2>Project</h2>
+        <div id="projects"><div class="note">Loading projects...</div></div>
+        <div class="buttons">
+          <button id="run" class="primary">Start live audit</button>
+          <button id="replay">Replay recorded audit</button>
+        </div>
+        <div id="keynote" class="note"></div>
+        <div class="upload">
+          <p>Audit your own project: a .zip with your training script, the CSV and an
+            <code>audit.yaml</code> (see <code>demo/f1/audit.yaml</code>).</p>
+          <input id="zip" type="file" accept=".zip">
+          <div id="uploadmsg" class="msg"></div>
+        </div>
+        <div id="runmsg" class="msg"></div>
+      </div>
+    </aside>
+    <main>
+      <div id="result" class="panel hidden" style="margin-bottom: 14px"></div>
+      <div class="panel">
+        <h2 id="timelinetitle">Investigation</h2>
+        <div id="timeline" class="timeline">
+          <div class="empty">Pick a project and start an audit. Muse's steps and every measurement appear here as they happen.</div>
+        </div>
+      </div>
+      <iframe id="report" class="hidden" title="Audit report" sandbox="allow-scripts"></iframe>
+    </main>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var state = { project: null, projects: [], job: null, next: 0, timer: null };
+  var $ = function (id) { return document.getElementById(id); };
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  }
+
+  function post(url, body, headers) {
+    var h = Object.assign({ "X-Auditor": "1" }, headers || {});
+    return fetch(url, { method: "POST", headers: h, body: body }).then(function (r) {
+      return r.json().then(function (data) {
+        if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+        return data;
+      });
+    });
+  }
+
+  function loadProjects(select) {
+    return fetch("/api/projects").then(function (r) { return r.json(); }).then(function (data) {
+      state.projects = data.projects;
+      $("keynote").textContent = data.has_key
+        ? "Live audits call the Meta Model API (about $0.03 to $0.05 each)."
+        : "No META_MODEL_API_KEY in .env: live audits are off. Replay works without a key.";
+      $("run").dataset.haskey = data.has_key ? "1" : "";
+      var list = $("projects");
+      list.textContent = "";
+      data.projects.forEach(function (p, i) {
+        var row = el("label", "project");
+        var radio = el("input");
+        radio.type = "radio"; radio.name = "project"; radio.value = p.id;
+        radio.checked = select ? p.id === select : (state.project ? p.id === state.project : i === 0);
+        if (radio.checked) state.project = p.id;
+        radio.addEventListener("change", function () { state.project = p.id; updateButtons(); });
+        var text = el("div");
+        text.appendChild(el("div", "title", p.title));
+        text.appendChild(el("div", "kind", p.kind === "demo" ? "demo project" : "uploaded project"));
+        row.appendChild(radio); row.appendChild(text);
+        list.appendChild(row);
+      });
+      updateButtons();
+    });
+  }
+
+  function current() {
+    return state.projects.find(function (p) { return p.id === state.project; });
+  }
+
+  function updateButtons() {
+    var running = state.timer !== null;
+    var p = current();
+    $("run").disabled = running || !p || !$("run").dataset.haskey;
+    $("replay").disabled = running || !p || !p.replay;
+    $("zip").disabled = running;
+  }
+
+  function start(mode) {
+    $("runmsg").textContent = ""; $("runmsg").className = "msg";
+    post("/api/audit", JSON.stringify({ project: state.project, mode: mode }), { "Content-Type": "application/json" })
+      .then(function (data) {
+        state.job = data.job; state.next = 0;
+        $("timeline").textContent = "";
+        $("result").classList.add("hidden");
+        $("report").classList.add("hidden");
+        var title = $("timelinetitle");
+        title.textContent = "";
+        title.appendChild(el("span", "spinner"));
+        title.appendChild(document.createTextNode(mode === "replay" ? "Replaying a recorded audit" : "Investigating"));
+        state.timer = setInterval(poll, 700);
+        updateButtons();
+      })
+      .catch(function (err) { $("runmsg").textContent = err.message; $("runmsg").className = "msg error"; });
+  }
+
+  function addCard(card) {
+    var timeline = $("timeline");
+    if (card.type === "muse") {
+      var c = el("div", "card muse");
+      c.appendChild(el("div", "who", "Muse"));
+      c.appendChild(el("div", null, card.text));
+      timeline.appendChild(c);
+    } else if (card.type === "call") {
+      timeline.appendChild(el("div", "card call", "→ " + card.name + (card.text ? " " + card.text : "")));
+    } else if (card.type === "result") {
+      if (!card.text) return;
+      var r = el("div", "card result");
+      var icon = { flagged: "!", error: "!", clear: "✓", not_applicable: "–", measured: "#" }[card.status]
+        || "•";
+      r.appendChild(el("span", "dot " + (card.status || ""), icon));
+      var body = el("div");
+      if (card.status && card.name === "run_check") body.appendChild(el("span", "status", card.status.replace("_", " ")));
+      body.appendChild(document.createTextNode(card.text));
+      r.appendChild(body);
+      timeline.appendChild(r);
+    } else if (card.type === "stopped") {
+      timeline.appendChild(el("div", "card result", "Stopped: " + card.text));
+    }
+    timeline.lastChild && timeline.lastChild.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function poll() {
+    fetch("/api/jobs/" + state.job + "?since=" + state.next).then(function (r) { return r.json(); }).then(function (job) {
+      job.events.forEach(function (event) {
+        if (event.type === "group") event.cards.forEach(addCard); else addCard(event);
+      });
+      state.next = job.next;
+      if (job.status !== "running") finish(job);
+    });
+  }
+
+  function fmt(v) { return typeof v === "number" ? v.toFixed(4) : "-"; }
+
+  function finish(job) {
+    clearInterval(state.timer); state.timer = null;
+    $("timelinetitle").textContent = job.mode === "replay" ? "Investigation (recorded)" : "Investigation";
+    updateButtons();
+    var box = $("result");
+    box.textContent = "";
+    box.classList.remove("hidden");
+    if (job.status === "failed") {
+      box.appendChild(el("div", "msg error", job.error));
+      return;
+    }
+    var v = job.verdict;
+    var tone = { confirmed: ["critical", "!"], not_found: ["good", "✓"], inconclusive: ["warning", "?"] }[v.verdict]
+      || ["warning", "?"];
+    var banner = el("div", "banner");
+    var badge = el("span", "badge tone-" + tone[0]);
+    badge.appendChild(el("span", "icon", tone[1]));
+    badge.appendChild(document.createTextNode(v.verdict.replace("_", " ").toUpperCase()));
+    banner.appendChild(badge);
+    var text = el("div");
+    text.appendChild(el("div", null, v.summary));
+    var stats = el("div", "stats");
+    [["Reported " + v.metric, fmt(v.reported)], ["Corrected " + v.metric, fmt(v.corrected)],
+     ["Model cost", typeof v.cost === "number" ? "$" + v.cost.toFixed(3) : "-"]].forEach(function (s) {
+      var item = el("div"); item.appendChild(el("b", null, s[1])); item.appendChild(document.createTextNode(s[0]));
+      stats.appendChild(item);
+    });
+    text.appendChild(stats);
+    banner.appendChild(text);
+    box.appendChild(banner);
+    if (job.report_url) {
+      $("report").src = job.report_url;
+      $("report").classList.remove("hidden");
+    }
+  }
+
+  $("run").addEventListener("click", function () { start("live"); });
+  $("replay").addEventListener("click", function () { start("replay"); });
+  $("zip").addEventListener("change", function () {
+    var file = this.files[0];
+    if (!file) return;
+    $("uploadmsg").textContent = "Checking " + file.name + "..."; $("uploadmsg").className = "msg";
+    post("/api/upload", file, { "Content-Type": "application/zip", "X-Filename": file.name })
+      .then(function (data) {
+        $("uploadmsg").textContent = "Added " + data.title + ". Select it and start a live audit.";
+        return loadProjects(data.id);
+      })
+      .catch(function (err) { $("uploadmsg").textContent = err.message; $("uploadmsg").className = "msg error"; })
+      .then(function () { $("zip").value = ""; });
+  });
+  loadProjects();
+})();
+</script>
+</body>
+</html>

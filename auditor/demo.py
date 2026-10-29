@@ -123,7 +123,7 @@ def narrate(kind: str, data: dict[str, Any]) -> None:
         if data.get("text", "").strip():
             print(f"\n  Muse: {_clip(data['text'].strip(), 200)}")
         for call in data.get("tool_calls", []):
-            print(f"    -> {call['name']}{_args(call['name'], call.get('arguments'))}")
+            print(f"    -> {call['name']}{describe_call(call['name'], call.get('arguments'))}")
     elif kind == "tool":
         line = describe_result(data["name"], data.get("result") or {})
         if line:
@@ -133,7 +133,7 @@ def narrate(kind: str, data: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
-def _args(name: str, args: Any) -> str:
+def describe_call(name: str, args: Any) -> str:
     if not isinstance(args, dict) or not args:
         return ""
     if name == "read_file":

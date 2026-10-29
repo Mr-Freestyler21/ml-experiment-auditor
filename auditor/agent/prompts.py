@@ -31,7 +31,8 @@ How to work:
 
 Rules:
 - Every number you write must come from a tool result. Do not calculate differences or
-  percentages yourself; if no tool returned it, say it in words.
+  percentages yourself; if no tool returned it, say it in words. Round to at most 4 decimals
+  (0.7054, not 0.7053827066234014).
 - A score drop alone is never proof. "confirmed" needs a flagged check; cite its evidence id.
 - A flagged check A or C describes a flaw in procedure. Confirm it even when the fix barely changes
   the score, and report the measured effect (for example "the fix changes accuracy by 0.0000").

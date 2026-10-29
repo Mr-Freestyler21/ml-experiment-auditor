@@ -27,6 +27,14 @@ python -m auditor.cli demo --replay   # no API key: replays two recorded audits,
 python -m auditor.cli demo            # live: Muse audits both projects (~4 min, ~$0.07)
 ```
 
+Or use the local web page: pick a demo or upload your own project as a .zip, watch Muse's
+investigation step by step, and read the report when it finishes. It runs only on your computer
+(127.0.0.1), one audit at a time.
+
+```bash
+python -m auditor.cli serve           # opens http://127.0.0.1:8000
+```
+
 Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
 [clean project report](examples/clean/report.md) (not found). Each folder also has a
 `report.html`: download it and open it in a browser.
@@ -124,6 +132,7 @@ python -m auditor.cli baseline demo/f1    # rerun in the sandbox, compare with t
 python -m auditor.cli check demo/f1       # the three checks (add --no-llm for rules only)
 python -m auditor.cli audit demo/f1       # full audit; writes runs/audit-<time>/report.{md,json,html}
 python -m auditor.cli demo [--replay]     # the demo
+python -m auditor.cli serve               # local web page: pick or upload a project, watch it live
 python -m pytest -q                       # tests (no API calls; the model is scripted)
 ```
 
@@ -149,7 +158,8 @@ every change made while developing against the development set.
 ## Repository
 
 ```
-auditor/       sandbox, tracer, checks, agent (client, tools, loop, prompts, verdict), patching, reports, CLI
+auditor/       sandbox, tracer, checks, agent (client, tools, loop, prompts, verdict), patching, reports,
+               CLI, demo, web (local page)
 benchmark/     project generator, answer keys, runner, scoring, RESULTS.md
 demo/          f1 (the origin story) and clean (an honest project)
 examples/      recorded audits with reports and evidence

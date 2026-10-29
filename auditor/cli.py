@@ -5,6 +5,7 @@
   python -m auditor.cli check demo/f1 --no-llm   # rules only
   python -m auditor.cli audit demo/f1            # the Meta model investigates with the checks as tools
   python -m auditor.cli demo [--replay]          # the full demo: F1, then the clean project
+  python -m auditor.cli serve                    # local web page: pick or upload a project
 """
 
 from __future__ import annotations
@@ -50,8 +51,13 @@ def main(argv: list[str] | None = None) -> int:
     demo.add_argument("--replay", action="store_true", help="replay the recorded audits in examples/ (no API key)")
     demo.add_argument("--no-open", action="store_true", help="do not open the HTML reports in a browser")
     demo.add_argument("--delay", type=float, default=0.6, help="seconds between replayed steps")
+    serve_cmd = commands.add_parser("serve", help="a local web page: pick or upload a project, watch the audit live")
+    serve_cmd.add_argument("--port", type=int, default=8000)
+    serve_cmd.add_argument("--no-open", action="store_true", help="do not open the page in a browser")
     args = parser.parse_args(argv)
 
+    if args.command == "serve":
+        return _serve(args.port, open_page=not args.no_open)
     if args.command == "demo":
         return run_demo(REPO_ROOT, replay=args.replay, open_reports=not args.no_open, delay=args.delay)
 
@@ -68,6 +74,29 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "audit":
         return _audit(config, sandbox, args.max_tokens, args.max_steps)
     return _check(config, sandbox, use_llm=not args.no_llm)
+
+
+def _serve(port: int, open_page: bool) -> int:
+    import webbrowser
+
+    from auditor.web.server import AuditorApp, serve
+
+    print("Preparing sandbox environment (first run installs packages)...")
+    default_sandbox(REPO_ROOT)
+    app = AuditorApp(REPO_ROOT, sandbox_factory=lambda: default_sandbox(REPO_ROOT),
+                     client_factory=lambda: meta_client_from_env(REPO_ROOT))
+    server = serve(app, port)
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    print(f"ML Experiment Auditor is running at {url}  (local only; press Ctrl+C to stop)")
+    if open_page:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopped.")
+    finally:
+        server.server_close()
+    return 0
 
 
 def _audit(config: AuditConfig, sandbox: Sandbox, max_tokens: int | None, max_steps: int) -> int:

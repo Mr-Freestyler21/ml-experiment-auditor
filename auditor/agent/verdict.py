@@ -1,6 +1,6 @@
 """Validate the model's final verdict before it is accepted.
 
-Rules (CLAUDE.md section 4):
+Rules (the project's core rules: evidence or no claim, three verdicts, model never invents numbers):
   - every finding and caveat cites evidence ids that exist;
   - a finding of family X cites a run_check(X) result whose status is "flagged";
   - confirmed needs at least one finding; not_found and inconclusive have none;

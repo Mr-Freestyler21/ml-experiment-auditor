@@ -146,6 +146,51 @@ def test_label_encoder_on_all_rows_is_clear_with_a_note(tmp_path, sandbox):
     assert "only learns category names" in result.summary
 
 
+def test_pandas_standardisation_before_split_is_found_by_reading_the_code():
+    from auditor.checks.preprocessing import whole_data_statistics
+
+    script = "\n".join([
+        "X = df[features]",                                   # 1
+        "y = df['y']",                                        # 2
+        "X = (X - X.mean()) / X.std()",                       # 3  leak
+        "df['a'] = df['a'] / df['a'].max()",                  # 4  leak
+        "X = X.fillna(X.median())",                           # 5  leak
+        "rate = y.mean()",                                    # 6  target, not preprocessing
+        "scale = other.std()",                                # 7  other variable
+        "X_train, X_test = X[:80], X[80:]",                   # 8  split
+        "X_train = (X_train - X_train.mean()) / X_train.std()",  # 9  after the split, train only
+    ])
+
+    found = whole_data_statistics(script, before_line=8)
+
+    assert [(f["line"], f["variable"], f["statistic"]) for f in found] == [
+        (3, "X", "mean"), (4, "df", "max"), (5, "X", "median")]
+    assert whole_data_statistics(script, before_line=None) == []
+
+
+def test_pandas_scaler_project_is_flagged_through_the_script(tmp_path, sandbox):
+    project = tmp_path / "pandas"
+    project.mkdir()
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"a": rng.normal(size=80), "b": rng.normal(size=80), "c": rng.normal(size=80)})
+    df["y"] = (df["a"] > 0).astype(int)
+    df.to_csv(project / "data.csv", index=False)
+    (project / "audit.yaml").write_text(CONFIG, encoding="utf-8")
+    script = HEADER + "X = (X - X.mean()) / X.std()\n" + \
+        "X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, random_state=0)\n" + \
+        "acc = LogisticRegression().fit(X_tr, y_tr).score(X_te, y_te)\n" + FOOTER
+    (project / "train.py").write_text(script, encoding="utf-8")
+    traced = run_traced(load_config(project), sandbox)
+
+    without_script = check_preprocessing(traced.events, traced.splits)
+    with_script = check_preprocessing(traced.events, traced.splits, script=script)
+
+    assert without_script.status == "clear"  # the tracer alone cannot see pandas
+    assert with_script.status == "flagged"
+    assert with_script.evidence["static_code"][0]["line"] == 8
+    assert "plain pandas" in with_script.summary
+
+
 def test_incomplete_trace_is_not_judged():
     split = EvaluationSplit("M", [0], [1], 1, 2, ("predict",), 1, 1, fit_seq=2, predict_seq=3, model_obj=9)
 

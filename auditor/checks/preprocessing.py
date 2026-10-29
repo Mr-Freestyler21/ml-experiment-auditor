@@ -10,10 +10,16 @@ What the fitted object learns decides how serious that is:
   - vocabulary: only the set of category names (LabelEncoder, OneHotEncoder, ...). Noted, not
     flagged: knowing a category exists says nothing about the labels.
 Unknown classes count as statistics, the cautious choice.
+
+The tracer only sees scikit-learn. Preprocessing written in plain pandas, such as
+`X = (X - X.mean()) / X.std()` before the split, is found by reading the script: an
+assignment before the split that rewrites a variable using its own whole-data statistics.
+Those findings are flagged with basis "static_code" and the offending line.
 """
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Sequence
 from typing import Any
 
@@ -30,7 +36,9 @@ def check_preprocessing(
     events: Sequence[dict[str, Any]],
     splits: Sequence[EvaluationSplit],
     incomplete_reason: str | None = None,
+    script: str | None = None,
 ) -> CheckResult:
+    """`script` is the entry script's source, used to find preprocessing in plain pandas."""
     if incomplete_reason:
         return _result("not_applicable", f"Trace incomplete: {incomplete_reason}.")
     if not splits:
@@ -44,7 +52,10 @@ def check_preprocessing(
         if e.get("from_script") and e["method"] in FIT_METHODS
         and e["obj"] in transformers and e["obj"] not in model_objs
     ]
+    static = whole_data_statistics(script, _split_line(events, splits)) if script else []
     if not fits:
+        if static:
+            return _static_result(static, splits)
         return _result("clear", "No preprocessing was fitted outside the evaluated models (e.g. all of it sits inside a pipeline).")
 
     findings, unverifiable = [], []
@@ -67,9 +78,13 @@ def check_preprocessing(
     }
     if unverifiable:
         evidence["unverifiable"] = _dedupe(unverifiable)
+    if static:
+        evidence["static_code"] = static
 
     if leaks:
         return _result("flagged", _summary(leaks), measurements=_measurements(leaks), evidence=evidence)
+    if static:
+        return _static_result(static, splits, evidence)
     if unverifiable and not notes:
         return _result(
             "not_applicable",
@@ -85,6 +100,80 @@ def check_preprocessing(
             "learns category names, which carry no information about the labels."
         )
     return _result("clear", summary, evidence=evidence)
+
+
+STATISTICS = {"mean", "std", "var", "min", "max", "median", "quantile", "sum"}
+
+
+def whole_data_statistics(script: str, before_line: int | None) -> list[dict[str, Any]]:
+    """Assignments before the split that rewrite a variable using its own statistics.
+
+    Matches `X = (X - X.mean()) / X.std()`, `X = X.fillna(X.mean())` and
+    `df['a'] = df['a'] / df['a'].max()`. Variables named like train/test, and y, are skipped.
+    """
+    if before_line is None:
+        return []
+    try:
+        tree = ast.parse(script)
+    except SyntaxError:
+        return []
+    lines = script.splitlines()
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or node.lineno >= before_line:
+            continue
+        targets = {_base_name(t) for t in node.targets} - {None}
+        matches = [
+            call for call in ast.walk(node.value)
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+            and call.func.attr in STATISTICS and _base_name(call.func.value) in targets
+            and not _excluded(_base_name(call.func.value))
+        ]
+        if matches:
+            first = min(matches, key=lambda c: (c.lineno, c.col_offset))  # as written, left to right
+            found.append({"line": node.lineno, "variable": _base_name(first.func.value),
+                          "statistic": first.func.attr, "code": lines[node.lineno - 1].strip()})
+    return sorted(found, key=lambda f: f["line"])
+
+
+def _base_name(node: ast.AST) -> str | None:
+    while isinstance(node, (ast.Subscript, ast.Attribute)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _excluded(name: str) -> bool:
+    lowered = name.lower()
+    return lowered == "y" or "train" in lowered or "test" in lowered
+
+
+def _split_line(events: Sequence[dict[str, Any]], splits: Sequence[EvaluationSplit]) -> int | None:
+    """The earliest script line where rows were divided or a model was fitted."""
+    lines = [e.get("line") for e in events if e.get("event") == "split"]
+    lines += [s.fit_line for s in splits]
+    lines = [n for n in lines if isinstance(n, int)]
+    return min(lines) if lines else None
+
+
+def _static_result(
+    static: list[dict[str, Any]], splits: Sequence[EvaluationSplit], evidence: dict[str, Any] | None = None
+) -> CheckResult:
+    first = static[0]
+    split = splits[0]
+    summary = (
+        f"Line {first['line']} rewrites {first['variable']} using its own {first['statistic']}() over all rows "
+        f"(`{first['code']}`) before {split.model} is trained and evaluated (line {split.fit_line}), so test "
+        "rows shaped the preprocessing. Found by reading the script: this is plain pandas, which the call "
+        "tracer cannot see."
+    )
+    return _result(
+        "flagged",
+        summary,
+        measurements={"leaking_fits": 0, "static_code_findings": len(static), "label_informed_leaks": 0},
+        evidence={**(evidence or {}), "static_code": static,
+                  "leaks": [{"class": "pandas", "method": f["statistic"], "line": f["line"], "kind": "statistics",
+                             "basis": "static_code"} for f in static]},
+    )
 
 
 def _compare(fit: dict[str, Any], split: EvaluationSplit) -> dict[str, Any] | None:

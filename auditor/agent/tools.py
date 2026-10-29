@@ -148,7 +148,7 @@ def _run_check(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
         return {"error": f"the traced run failed: {traced.error}"}
     incomplete = s.incomplete_reason()
     if check == "A":
-        result = check_preprocessing(traced.events, traced.splits, incomplete)
+        result = check_preprocessing(traced.events, traced.splits, incomplete, _entry_script(s))
     elif check == "C":
         result = check_group_overlap(
             s.data, traced.splits, s.config.group_columns, s.config.time_column, incomplete
@@ -156,6 +156,10 @@ def _run_check(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
     else:
         result = _check_b(s, traced, args.get("suspects") or [])
     return compact(result.to_json())
+
+
+def _entry_script(s: AuditSession) -> str:
+    return (s.config.project_dir / s.config.entry_script).read_text(encoding="utf-8")
 
 
 def _check_b(s: AuditSession, traced: TracedRun, proposed: list[Any]) -> CheckResult:
@@ -306,7 +310,8 @@ def _run_patched(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
         "change_vs_baseline": round(value - baseline, 4) if isinstance(value, (int, float)) and baseline else None,
         "evaluations": [_describe_split(s, sp) for sp in traced.splits[:MAX_LIST_ITEMS]],
         "checks_after_patch": {
-            "A": check_preprocessing(traced.events, traced.splits, incomplete).status,
+            "A": check_preprocessing(traced.events, traced.splits, incomplete,
+                                     patch.patched if patch.path == s.config.entry_script else None).status,
             **_check_c_parts(check_group_overlap(
                 s.data, traced.splits, s.config.group_columns, s.config.time_column, incomplete
             )),

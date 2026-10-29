@@ -119,7 +119,8 @@ class MetaLLMClient(LLMClient):
     def __init__(self, api_key: str, model: str = DEFAULT_MODEL, max_tokens: int = DEFAULT_MAX_TOKENS) -> None:
         from openai import OpenAI
 
-        self._client = OpenAI(base_url=BASE_URL, api_key=api_key, timeout=120)
+        # The SDK retries connection errors and 429/5xx responses with backoff.
+        self._client = OpenAI(base_url=BASE_URL, api_key=api_key, timeout=120, max_retries=5)
         self.model = model
         self.budget = TokenBudget(cap=max_tokens)
 

@@ -63,8 +63,9 @@ CHURN = Theme(
     target="churned",
     features=["tenure_weeks", "spend_last_4w", "support_tickets", "discount_rate", "region_code"],
     categorical="plan",
-    prediction_time="At the start of each week, predict whether the customer churns that week, using only "
-                    "information from earlier weeks. The same customers are scored every week.",
+    prediction_time="At the start of each week, predict whether the customer churns that week. Each row's "
+                    "features (spend, tickets, discount, plan, region) summarise activity up to the start "
+                    "of that week. The same customers are scored every week.",
     entity="customer_id",
     time="week",
     entities_new_in_use=False,
@@ -102,8 +103,10 @@ ENERGY = Theme(
     target="high_usage",
     features=["temperature_avg", "occupancy", "floor_area", "usage_last_month", "insulation_index"],
     categorical="building_type",
-    prediction_time="At the start of each month, predict whether the building's usage that month is high, "
-                    "using only data up to the previous month. The same buildings are scored every month.",
+    prediction_time="At the start of each month, predict whether the building's usage that month is high. "
+                    "temperature_avg and occupancy are the month's forecast and booking figures, known at "
+                    "the start of the month; usage_last_month is the previous month's reading. The same "
+                    "buildings are scored every month.",
     entity="building_id",
     time="month",
     entities_new_in_use=False,

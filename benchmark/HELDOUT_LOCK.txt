@@ -2,3 +2,9 @@ SHA-256 of the held-out answer keys (benchmark/answers/ho_*.json), recorded befo
 was run on them. Recompute with: python -m benchmark.generate --verify-lock
 
 d4a94c7dde4590ad92c1fa34f00bb192becc6cedfcd0bd585642472d63e502f2
+
+Change log (before any held-out audit was run):
+- 2026-10-29: the prediction_time sentence in the churn (dev) and energy (dev and held-out)
+  audit.yaml files was reworded. The development run showed the old wording ("using only data
+  up to the previous month") contradicted the data, whose rows hold same-period values. Data,
+  scripts and answer keys are unchanged, so the fingerprint above still verifies.

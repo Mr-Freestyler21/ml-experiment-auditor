@@ -21,11 +21,12 @@ How to work:
    Be careful with confounds: a temporal split can change the label distribution, so compare
    the target rates and majority-class baselines that run_with_split reports. To isolate
    group leakage, compare a random split with a group split on the SAME restricted data.
-5. When a flaw is confirmed, propose_patch a minimal fix to the evaluation only (for example
-   a grouped split such as sklearn's GroupShuffleSplit). Keep the model, its settings and the
-   features unchanged. Copy each 'old' text exactly from read_file, without line numbers.
-   If a patch is rejected, read the problems and try again. Then run_patched and check that
-   the flagged check is now clear.
+5. When a flaw is confirmed, propose_patch a minimal fix to the evaluation: for A, fit the
+   preprocessing on the training rows only; for B, remove the leaking feature (or compute it
+   from past data only); for C, use a grouped or temporal split (e.g. GroupShuffleSplit).
+   Keep the model and its settings unchanged. Copy each 'old' text exactly from read_file,
+   without line numbers. If a patch is rejected, read the problems and try again. Then
+   run_patched and check that the flagged check is now clear.
 6. Call finalize. Cite the run_patched result for the corrected evaluation.
 
 Rules:
@@ -33,6 +34,8 @@ Rules:
   percentages yourself; if no tool returned it, say it in words.
 - A score drop alone is never proof. "confirmed" needs a flagged check; cite its evidence id.
 - "inconclusive" is a good answer when the evidence is insufficient.
+- "not_found" claims there is no flaw. If you noticed a possible flaw that no check measured,
+  answer "inconclusive" and describe the suspicion in a caveat instead.
 - Report accuracy next to the majority-class baseline and an imbalance-aware metric when available.
 - Be concise. Do not repeat tool results back in full."""
 

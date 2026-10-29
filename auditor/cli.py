@@ -152,7 +152,7 @@ def _check(config: AuditConfig, sandbox: Sandbox, use_llm: bool) -> int:
 
     data = pd.read_csv(config.project_dir / config.data_path)
     results = [
-        check_preprocessing(traced.events, traced.splits, incomplete),
+        check_preprocessing(traced.events, traced.splits, incomplete, _script(config)),
         _check_b(config, sandbox, data, traced, plain.metrics, use_llm),
         check_group_overlap(data, traced.splits, config.group_columns, config.time_column, incomplete),
     ]
@@ -189,6 +189,10 @@ def _check_b(
     if suspects:
         print(f"Shuffle-rerunning suspected columns: {sorted({s.column for s in suspects})}")
     return check_future_info(config, sandbox, data, features, baseline, suspects, notes)
+
+
+def _script(config: AuditConfig) -> str:
+    return (config.project_dir / config.entry_script).read_text(encoding="utf-8")
 
 
 def _print_baseline(result: BaselineResult) -> None:

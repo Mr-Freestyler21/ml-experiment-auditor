@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 from dataclasses import asdict, dataclass, field, replace
@@ -362,7 +363,7 @@ def main() -> None:
     parser.add_argument("--verify-lock", action="store_true", help="check the held-out answer keys are unchanged")
     args = parser.parse_args()
     if args.verify_lock:
-        recorded = (ROOT / "HELDOUT_LOCK.txt").read_text().split()[-1]
+        recorded = re.search(r"\b[0-9a-f]{64}\b", (ROOT / "HELDOUT_LOCK.txt").read_text()).group(0)
         digest = hashlib.sha256()
         for path in sorted(ANSWERS.glob("ho_*.json")):
             digest.update(path.name.encode() + path.read_bytes())

@@ -3,8 +3,9 @@ data_path: data.csv
 target: high_usage
 reported_metric: accuracy
 reported_value: 0.94
-prediction_time: At the start of each month, predict whether the building's usage that month is high,
-  using only data up to the previous month. The same buildings are scored every month.
+prediction_time: At the start of each month, predict whether the building's usage that month is high.
+  temperature_avg and occupancy are the month's forecast and booking figures, known at the start of the
+  month; usage_last_month is the previous month's reading. The same buildings are scored every month.
 time_column: month
 random_seed: 0
 timeout_seconds: 300

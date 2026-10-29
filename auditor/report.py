@@ -14,6 +14,7 @@ from typing import Any
 
 from auditor.agent.loop import AgentResult
 from auditor.agent.tools import AuditSession, EvidenceItem
+from auditor.report_html import render_html
 
 FAMILY_NAMES = {
     "A": "Preprocessing fitted on test rows",
@@ -27,6 +28,8 @@ def write_report(session: AuditSession, result: AgentResult, model: str) -> Path
     (result.audit_dir / "report.json").write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
     path = result.audit_dir / "report.md"
     path.write_text(render_markdown(data, result.audit_dir), encoding="utf-8")
+    (result.audit_dir / "report.html").write_text(render_html(json.loads(json.dumps(data, default=str))),
+                                                  encoding="utf-8")
     return path
 
 

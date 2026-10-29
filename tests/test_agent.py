@@ -216,6 +216,7 @@ def test_full_scripted_audit_writes_the_report(session, project, tmp_path):
     assert labels == ["Original evaluation (rerun)", "Patched script (P1)", "Group split, only year = 2021"]
     assert data["evaluations"][1]["checks_after_patch"]["C_groups"] == "clear"
     assert data["patch"]["id"] == "P1"
+    assert "CONFIRMED" in (tmp_path / "audit" / "report.html").read_text(encoding="utf-8")
 
 
 def test_the_loop_keeps_the_full_history_with_matching_call_ids(session, tmp_path):

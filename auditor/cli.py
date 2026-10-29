@@ -77,6 +77,7 @@ def _audit(config: AuditConfig, sandbox: Sandbox, max_tokens: int | None, max_st
     _print_verdict(result)
     report = write_report(session, result, client.model)
     print(f"Report: {report}")
+    print(f"Open in a browser: {report.with_name('report.html')}")
     return 0 if result.stopped_because == "finalized" else 1
 
 

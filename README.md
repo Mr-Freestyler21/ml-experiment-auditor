@@ -41,6 +41,7 @@ measure the corrected evaluation, write the fix, and explain it with cited evide
 alone detects most flaws but its estimates of the true score are off by about 7 points.
 
 Example reports: [F1, confirmed](examples/f1/report.md) and [clean project, not found](examples/clean/report.md).
+Download either folder and open `report.html` in a browser for the visual version.
 
 ## Setup
 
@@ -103,7 +104,11 @@ evidence ids, `confirmed` needs a flagged check, and every number in the text mu
 in a tool result. When a flaw is confirmed, the model proposes a fix as exact text edits; code
 applies them to a copy, checks it compiles and leaves the model's constructor untouched, runs it,
 and re-runs checks A and C on it. The report (`report.md`, `report.json`) and an `evidence/`
-folder (transcript, evidence, verdict, patch diff) are saved under `runs/audit-<time>/`.
+folder (transcript, evidence, verdict, patch diff) are saved under `runs/audit-<time>/`, with
+`report.html`: a single self-contained page (no server or internet needed) showing the verdict,
+a chart of the original against every corrected evaluation with its majority baseline, the
+findings with the offending lines, the fix as a diff, and the evidence index. All text in it is
+HTML-escaped, since it comes from audited code and model output.
 
 ## Benchmark
 

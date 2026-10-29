@@ -1,0 +1,125 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Audit report: clean</title><style>
+.report {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --series: #2a78d6;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --good-ink: #006300;
+  --del-bg: #fbe4e4; --add-bg: #e3f4e3; --code-bg: #f3f2ee; --mark-bg: #fff3c4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .report {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --series: #3987e5;
+    --good-ink: #0ca30c; --del-bg: #3a1d1d; --add-bg: #17331a; --code-bg: #232321; --mark-bg: #3d3416;
+  }
+}
+:root[data-theme="dark"] .report {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --series: #3987e5;
+  --good-ink: #0ca30c; --del-bg: #3a1d1d; --add-bg: #17331a; --code-bg: #232321; --mark-bg: #3d3416;
+}
+html, body { margin: 0; }
+body { background: #f9f9f7; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) body { background: #0d0d0d; } }
+:root[data-theme="dark"] body { background: #0d0d0d; }
+.report { background: var(--page); color: var(--ink); min-height: 100vh;
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 36px 0 12px; }
+h3 { font-size: 16px; margin: 0 0 6px; }
+.sub { color: var(--ink-2); margin: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
+  margin: 12px 0; }
+.verdict { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-start; }
+.verdict > div { flex: 1 1 320px; min-width: 0; }
+.badge { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .04em;
+  padding: 6px 12px; border-radius: 999px; border: 2px solid var(--tone); color: var(--ink); white-space: nowrap; }
+.badge .icon { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--tone); color: #fff; font-size: 13px; }
+.tone-critical { --tone: var(--critical); } .tone-good { --tone: var(--good); } .tone-warning { --tone: var(--warning); }
+.tone-warning .icon { color: #0b0b0b; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--ink-2); font-size: 13px; margin-top: 10px; }
+.meta b { color: var(--ink); font-weight: 600; }
+.chip { display: inline-block; font: 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace; padding: 4px 7px;
+  border-radius: 6px; border: 1px solid var(--border); color: var(--ink); text-decoration: none; margin: 2px 4px 2px 0; }
+.chip:hover { border-color: var(--series); }
+.family { font-weight: 700; color: var(--ink-2); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+pre, code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 10px 0; }
+.codeline { display: block; background: var(--mark-bg); }
+.ln { color: var(--muted); user-select: none; display: inline-block; min-width: 3.2em; }
+.role { color: var(--ink-2); }
+.diff .del { display: block; background: var(--del-bg); }
+.diff .add { display: block; background: var(--add-bg); }
+.diff .hunk { display: block; color: var(--muted); }
+.diff .ctx { display: block; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+ul.plain { padding-left: 18px; margin: 6px 0; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .label { fill: var(--ink); font-size: 13px; }
+.chart .value { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.chart .tick { fill: var(--muted); font-size: 12px; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .bar { fill: var(--series); }
+.chart .majority { stroke: var(--ink); stroke-width: 2; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .row:hover .bar { opacity: .85; }
+.legend { display: flex; gap: 18px; color: var(--ink-2); font-size: 13px; margin: 2px 0 8px; flex-wrap: wrap; }
+.legend .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; background: var(--series);
+  vertical-align: middle; margin-right: 6px; }
+.legend .tk { display: inline-block; width: 2px; height: 14px; background: var(--ink); vertical-align: middle;
+  margin: 0 6px 0 4px; }
+.tooltip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18); max-width: 300px; display: none; z-index: 10; }
+.foot { color: var(--muted); font-size: 13px; margin-top: 40px; }
+:target { outline: 2px solid var(--series); outline-offset: 2px; }
+</style></head>
+<body><div class='report'><div class='wrap'>
+<p class='sub'>ML Experiment Auditor &middot; audit of <code>clean</code></p>
+<div class='card verdict'>
+<span class='badge tone-good'><span class='icon' aria-hidden='true'>✓</span>NOT FOUND</span>
+<div><h1>Not found: no evaluation flaw detected</h1><p>No evaluation flaw found. Baseline accuracy 0.765625 vs majority 0.68125 with roc_auc 0.7953318942255801 (E5). Preprocessing clear (E6) and grouped split has no patient overlap (E7). B dependence on num_prior_readmissions is strong but legitimate prior history known at discharge.</p><div class='meta'><span>Reported accuracy <b>0.7700</b>, reproduced <b>0.7656</b></span><span>Model <b>muse-spark-1.3</b></span><span><b>5</b> steps, <b>48.1 s</b></span><span><b>20210</b> tokens, about <b>$0.020</b></span></div></div></div>
+<h2>The numbers</h2><div class='card chart'><p class='sub'>The original evaluation next to every corrected evaluation the auditor measured. Hover a bar for details.</p><div class='legend'><span><span class='sw'></span>accuracy</span><span><span class='tk'></span>majority-class baseline (always guessing the most common class)</span></div><svg viewBox='0 0 810 74' role='img' aria-label='accuracy per evaluation'><line class='gridline' x1='340.0' x2='340.0' y1='8' y2='44'/><text class='tick' x='340.0' y='64' text-anchor='middle'>0</text><line class='gridline' x1='440.0' x2='440.0' y1='8' y2='44'/><text class='tick' x='440.0' y='64' text-anchor='middle'>0.25</text><line class='gridline' x1='540.0' x2='540.0' y1='8' y2='44'/><text class='tick' x='540.0' y='64' text-anchor='middle'>0.5</text><line class='gridline' x1='640.0' x2='640.0' y1='8' y2='44'/><text class='tick' x='640.0' y='64' text-anchor='middle'>0.75</text><line class='gridline' x1='740.0' x2='740.0' y1='8' y2='44'/><text class='tick' x='740.0' y='64' text-anchor='middle'>1</text><line class='baseline' x1='340' x2='340' y1='8' y2='44'/><g class='row' data-tip='Original evaluation (rerun)
+accuracy: 0.7656
+majority-class baseline: 0.6813
+evidence E5'><rect class='hit' x='0' y='8' width='810' height='36'/><text class='label' x='330' y='30.0' text-anchor='end'>Original evaluation (rerun)</text><path class='bar' d='M340.0,17.0 H642.2 Q646.2,17.0 646.2,21.0 V31.0 Q646.2,35.0 642.2,35.0 H340.0 Z'/><line class='majority' x1='612.5' x2='612.5' y1='13' y2='39'/><text class='value' x='654.2' y='30.0'>0.7656</text></g></svg></div>
+<h2>Findings</h2><div class='card'><p>No evaluation flaw was confirmed.</p></div>
+
+<h2>Corrected evaluation</h2><div class='card scroll'><table><thead><tr><th>Evaluation</th><th class='num'>accuracy</th><th class='num'>Change</th><th class='num'>Majority baseline</th><th class='num'>Target rate train / test</th><th class='num'>Shared groups</th><th>Checks after patch</th><th>Evidence</th></tr></thead><tbody><tr><td>Original evaluation (rerun)</td><td class='num'>0.7656</td><td class='num'>+0.0000</td><td class='num'>0.6813</td><td class='num'></td><td class='num'></td><td></td><td><a class='chip' href='#E5'>E5</a></td></tr></tbody></table></div>
+<h2>Reproduced baseline and context</h2><div class='card scroll'><table><tbody><tr><td>Reported accuracy</td><td class='num'>0.7700</td></tr><tr><td>Measured accuracy (reproduced)</td><td class='num'>0.7656</td></tr><tr><td>Seed</td><td class='num'>0</td></tr><tr><td>Environment</td><td class='num'>Python 3.14.3; numpy 2.4.3, pandas 3.0.1, scikit-learn 1.8.0</td></tr><tr><td>accuracy</td><td class='num'>0.7656</td></tr><tr><td>precision</td><td class='num'>0.6517</td></tr><tr><td>recall</td><td class='num'>0.5686</td></tr><tr><td>roc_auc</td><td class='num'>0.7953</td></tr><tr><td>majority_class_accuracy</td><td class='num'>0.6813</td></tr><tr><td>test_positive_rate (auditor)</td><td class='num'>0.3187</td></tr><tr><td>majority_class_accuracy (auditor)</td><td class='num'>0.6813</td></tr></tbody></table></div>
+<h2>Caveats and limits</h2><div class='card'><ul class='plain'><li>Check B flagged dependence on num_prior_readmissions, but this column is prior history known at discharge per prediction-time definition, not future information, so not a leak <a class='chip' href='#E8'>E8</a><a class='chip' href='#E2'>E2</a></li></ul></div>
+<h2>Evidence index</h2><div class='card scroll'><table><thead><tr><th>Id</th><th>Tool</th><th>Arguments</th><th>Result</th></tr></thead><tbody><tr id='E1'><td><b>E1</b></td><td>list_files</td><td><code>{}</code></td><td>4 files</td></tr><tr id='E2'><td><b>E2</b></td><td>read_file</td><td><code>{&quot;path&quot;: &quot;train.py&quot;}</code></td><td>read train.py</td></tr><tr id='E3'><td><b>E3</b></td><td>read_file</td><td><code>{&quot;path&quot;: &quot;README.md&quot;}</code></td><td>read README.md</td></tr><tr id='E4'><td><b>E4</b></td><td>read_file</td><td><code>{&quot;path&quot;: &quot;data.csv&quot;}</code></td><td>read data.csv</td></tr><tr id='E5'><td><b>E5</b></td><td>run_baseline</td><td><code>{}</code></td><td>reproduced, measured 0.7656</td></tr><tr id='E6'><td><b>E6</b></td><td>run_check</td><td><code>{&quot;check&quot;: &quot;A&quot;}</code></td><td>clear: No preprocessing was fitted outside the evaluated models (e.g. all of it sits inside a pipeline).</td></tr><tr id='E7'><td><b>E7</b></td><td>run_check</td><td><code>{&quot;check&quot;: &quot;C&quot;}</code></td><td>clear: 0 of 40 test groups by patient_id also appear in training (0.0% of test rows).</td></tr><tr id='E8'><td><b>E8</b></td><td>run_check</td><td><code>{&quot;check&quot;: &quot;B&quot;, &quot;suspects&quot;: [{&quot;column&quot;: &quot;num_prior_readmissions&quot;, &quot;reason&quot;: &quot;Strong predic…</code></td><td>flagged: Shuffling &#x27;num_prior_readmissions&#x27; drops accuracy from 0.7656 to 0.6438 (+0.1219 lost), and it is suspected of not being known at prediction time (Strong predictor of readmission; verify whether known at discharge or derived from future readmission label).</td></tr></tbody></table></div>
+<p class='foot'>Every number on this page comes from a tool result recorded as evidence. The model's own text (verdict, findings, caveats) was accepted only after code checked that each claim cites evidence and that every number in it appears in a tool result.</p>
+</div><div id='tip' class='tooltip' role='status'></div></div>
+<script>
+(function () {
+  var tip = document.getElementById('tip');
+  document.querySelectorAll('.chart .row').forEach(function (row) {
+    row.addEventListener('mousemove', function (e) {
+      tip.textContent = '';
+      row.getAttribute('data-tip').split('\n').forEach(function (line, i) {
+        var div = document.createElement('div');
+        div.textContent = line;
+        if (i === 0) div.style.fontWeight = '600';
+        tip.appendChild(div);
+      });
+      tip.style.display = 'block';
+      var x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+      tip.style.left = x + 'px';
+      tip.style.top = (e.clientY + 14) + 'px';
+    });
+    row.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+  });
+})();
+</script></body></html>

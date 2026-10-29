@@ -343,12 +343,27 @@ def generate(only: set[str] | None = None) -> list[dict]:
     return summaries
 
 
-def write_lock() -> str:
-    """A fingerprint of the held-out answer keys, committed before any held-out audit runs."""
+def heldout_fingerprint() -> str:
     digest = hashlib.sha256()
     for path in sorted(ANSWERS.glob("ho_*.json")):
         digest.update(path.name.encode() + path.read_bytes())
-    value = digest.hexdigest()
+    return digest.hexdigest()
+
+
+def recorded_fingerprint() -> str:
+    return re.search(r"\b[0-9a-f]{64}\b", (ROOT / "HELDOUT_LOCK.txt").read_text()).group(0)
+
+
+def write_lock() -> str:
+    """A fingerprint of the held-out answer keys, committed before any held-out audit runs.
+
+    An existing lock is never rewritten: it is only checked, and a mismatch is reported.
+    """
+    value = heldout_fingerprint()
+    if (ROOT / "HELDOUT_LOCK.txt").exists():
+        if recorded_fingerprint() != value:
+            print("WARNING: held-out answer keys differ from HELDOUT_LOCK.txt; the lock was not changed.")
+        return recorded_fingerprint()
     (ROOT / "HELDOUT_LOCK.txt").write_text(
         "SHA-256 of the held-out answer keys (benchmark/answers/ho_*.json), recorded before the auditor\n"
         f"was run on them. Recompute with: python -m benchmark.generate --verify-lock\n\n{value}\n",
@@ -363,11 +378,7 @@ def main() -> None:
     parser.add_argument("--verify-lock", action="store_true", help="check the held-out answer keys are unchanged")
     args = parser.parse_args()
     if args.verify_lock:
-        recorded = re.search(r"\b[0-9a-f]{64}\b", (ROOT / "HELDOUT_LOCK.txt").read_text()).group(0)
-        digest = hashlib.sha256()
-        for path in sorted(ANSWERS.glob("ho_*.json")):
-            digest.update(path.name.encode() + path.read_bytes())
-        print("held-out answer keys unchanged" if digest.hexdigest() == recorded else "MISMATCH")
+        print("held-out answer keys unchanged" if heldout_fingerprint() == recorded_fingerprint() else "MISMATCH")
         return
     generate(set(args.only) if args.only else None)
 

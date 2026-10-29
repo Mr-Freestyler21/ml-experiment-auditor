@@ -1,0 +1,125 @@
+{
+  "verdict": {
+    "caveats": [
+      {
+        "evidence_ids": [
+          "E10"
+        ],
+        "text": "Temporal evaluation is confounded by label shift with very different train and test target rates, so it does not isolate leakage."
+      },
+      {
+        "evidence_ids": [
+          "E14"
+        ],
+        "text": "Patched grouped split still mixes years in train and test, so residual forward-looking time overlap remains."
+      }
+    ],
+    "findings": [
+      {
+        "evidence_ids": [
+          "E7",
+          "E11",
+          "E12",
+          "E14"
+        ],
+        "explanation": "Random split shared every Year+Race between train and test. On the same 2024-only data, random-split accuracy stays high while group-split accuracy is much lower with similar target rates, isolating race-group leakage. Grouped evaluation clears the group overlap.",
+        "family": "C",
+        "title": "Random split leaks race groups; performance collapses on new races"
+      }
+    ],
+    "summary": "Reported accuracy does not hold for new races. Grouped Year+Race evaluation gives much lower accuracy near its baseline, confirming race-group leakage.",
+    "verdict": "confirmed"
+  },
+  "stopped_because": "finalized",
+  "steps": 8,
+  "duration_s": 157.1,
+  "usage": {
+    "calls": 8,
+    "tokens": 57006,
+    "cap": 200000,
+    "est_cost_usd": 0.051486
+  },
+  "model": "muse-spark-1.3",
+  "llm_calls": [
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_1",
+      "duration_s": 3.09,
+      "input": 2313,
+      "cached": 0,
+      "output": 178,
+      "reasoning": 36,
+      "total": 2491
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_2",
+      "duration_s": 3.13,
+      "input": 3962,
+      "cached": 0,
+      "output": 109,
+      "reasoning": 8,
+      "total": 4071
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_3",
+      "duration_s": 5.68,
+      "input": 4799,
+      "cached": 2289,
+      "output": 555,
+      "reasoning": 437,
+      "total": 5354
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_4",
+      "duration_s": 7.64,
+      "input": 5714,
+      "cached": 3953,
+      "output": 768,
+      "reasoning": 421,
+      "total": 6482
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_5",
+      "duration_s": 5.29,
+      "input": 7759,
+      "cached": 4721,
+      "output": 518,
+      "reasoning": 286,
+      "total": 8277
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_6",
+      "duration_s": 8.09,
+      "input": 8776,
+      "cached": 7665,
+      "output": 1289,
+      "reasoning": 938,
+      "total": 10065
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_7",
+      "duration_s": 4.21,
+      "input": 9490,
+      "cached": 8689,
+      "output": 95,
+      "reasoning": 41,
+      "total": 9585
+    },
+    {
+      "model": "muse-spark-1.3",
+      "purpose": "agent_step_8",
+      "duration_s": 6.69,
+      "input": 9928,
+      "cached": 2289,
+      "output": 753,
+      "reasoning": 463,
+      "total": 10681
+    }
+  ]
+}

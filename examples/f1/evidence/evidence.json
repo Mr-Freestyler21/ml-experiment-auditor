@@ -1,0 +1,730 @@
+[
+  {
+    "id": "E1",
+    "tool": "read_file",
+    "arguments": {
+      "path": "train.py"
+    },
+    "result": {
+      "path": "train.py",
+      "total_lines": 80,
+      "content": "   1  \"\"\"F1 pit-stop prediction: initial model with a random 80/20 split.\n   2  \n   3  Adapted from f1.ipynb (cells 1, 21, 23, 25) in\n   4  github.com/Mr-Freestyler21/f1-pit-stop-prediction. The modelling code is unchanged,\n   5  including the random split, so the auditor has the original evaluation to examine.\n   6  Only the output changed: metrics are written to metrics.json in AUDIT_OUTPUT_DIR.\n   7  \"\"\"\n   8  \n   9  import json\n  10  import os\n  11  from pathlib import Path\n  12  \n  13  import pandas as pd\n  14  from sklearn.ensemble import RandomForestClassifier\n  15  from sklearn.metrics import (\n  16      accuracy_score,\n  17      classification_report,\n  18      f1_score,\n  19      precision_score,\n  20      recall_score,\n  21      roc_auc_score,\n  22  )\n  23  from sklearn.model_selection import train_test_split\n  24  from sklearn.preprocessing import LabelEncoder\n  25  \n  26  HERE = Path(__file__).resolve().parent\n  27  \n  28  # Cell 1\n  29  df = pd.read_csv(HERE / \"data\" / \"laps.csv\")\n  30  \n  31  # Cell 21\n  32  features = ['Compound', 'TyreLife', 'Position', 'LapTime (s)',\n  33              'RaceProgress', 'Stint', 'LapTime_Delta', 'Cumulative_Degradation']\n  34  \n  35  target = 'PitNextLap'\n  36  \n  37  ml_data = df[df['LapTime (s)'] <= 200][features + [target]].dropna()\n  38  \n  39  le = LabelEncoder()\n  40  ml_data = ml_data.copy()\n  41  ml_data['Compound'] = le.fit_transform(ml_data['Compound'])\n  42  \n  43  # Cell 23\n  44  X = ml_data[features]\n  45  y = ml_data[target]\n  46  \n  47  X_train, X_test, y_train, y_test = train_test_split(\n  48      X, y, test_size=0.2, random_state=42\n  49  )\n  50  \n  51  model_v1 = RandomForestClassifier(n_estimators=100, random_state=42)\n  52  model_v1.fit(X_train, y_train)\n  53  \n  54  # Cell 25\n  55  y_pred_v1 = model_v1.predict(X_test)\n  56  \n  57  accuracy_v1 = accuracy_score(y_test, y_pred_v1)\n  58  print(f'Accuracy: {accuracy_v1:.2f}')\n  59  print()\n  60  print(classification_report(y_test, y_pred_v1))\n  61  \n  62  # Added for the auditor: write metrics where the sandbox can collect them.\n  63  y_proba_v1 = model_v1.predict_proba(X_test)[:, 1]\n  64  positive_rate = float(y_test.mean())\n  65  metrics = {\n  66      \"accuracy\": float(accuracy_v1),\n  67      \"precision\": float(precision_score(y_test, y_pred_v1)),\n  68      \"recall\": float(recall_score(y_test, y_pred_v1)),\n  69      \"f1\": float(f1_score(y_test, y_pred_v1)),\n  70      \"roc_auc\": float(roc_auc_score(y_test, y_proba_v1)),\n  71      \"majority_class_accuracy\": max(positive_rate, 1 - positive_rate),\n  72      \"test_positive_rate\": positive_rate,\n  73      \"n_train\": int(len(X_train)),\n  74      \"n_test\": int(len(X_test)),\n  75  }\n  76  \n  77  out_dir = Path(os.environ.get(\"AUDIT_OUTPUT_DIR\", HERE))\n  78  out_dir.mkdir(parents=True, exist_ok=True)\n  79  (out_dir / \"metrics.json\").write_text(json.dumps(metrics, indent=2))\n  80  print(json.dumps(metrics, indent=2))"
+    }
+  },
+  {
+    "id": "E2",
+    "tool": "list_files",
+    "arguments": {},
+    "result": {
+      "files": [
+        {
+          "path": "audit.yaml",
+          "bytes": 615
+        },
+        {
+          "path": "data/laps.csv",
+          "bytes": 6929359
+        },
+        {
+          "path": "README.md",
+          "bytes": 618
+        },
+        {
+          "path": "train.py",
+          "bytes": 2445
+        }
+      ]
+    }
+  },
+  {
+    "id": "E3",
+    "tool": "run_baseline",
+    "arguments": {},
+    "result": {
+      "status": "reproduced",
+      "reported": {
+        "accuracy": 0.95
+      },
+      "measured": 0.9519588218472976,
+      "difference": 0.001959,
+      "metrics": {
+        "accuracy": 0.9519588218472976,
+        "precision": 0.9208754208754208,
+        "recall": 0.8188622754491018,
+        "f1": 0.866877971473851,
+        "roc_auc": 0.985049607395319,
+        "majority_class_accuracy": 0.8089791249642551,
+        "test_positive_rate": 0.1910208750357449,
+        "n_train": 41964,
+        "n_test": 10491
+      },
+      "random_seed": 42,
+      "environment": {
+        "python": "3.14.3",
+        "packages": {
+          "numpy": "2.4.3",
+          "pandas": "3.0.1",
+          "scikit-learn": "1.8.0"
+        }
+      },
+      "duration_s": 11.23,
+      "error": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194159Z-713da9"
+    }
+  },
+  {
+    "id": "E4",
+    "tool": "read_file",
+    "arguments": {
+      "path": "data/laps.csv"
+    },
+    "result": {
+      "path": "data/laps.csv",
+      "total_lines": 52472,
+      "first_lines": [
+        "Driver,LapNumber,Compound,Stint,TyreLife,Position,LapTime (s),Race,Year,LapTime_Delta,Cumulative_Degradation,PitStop,PitNextLap,RaceProgress,Normalized_TyreLife,Position_Change",
+        "ALB,1,MEDIUM,1,2.0,17,100.625,Abu Dhabi Grand Prix,2023,0.0,0.0,0,0,0.0172413793103448,0.1176470588235294,0.0",
+        "ALB,2,MEDIUM,1,3.0,18,93.56,Abu Dhabi Grand Prix,2023,-7.064999999999998,-7.064999999999998,0,0,0.0344827586206896,0.1764705882352941,-1.0",
+        "ALB,3,MEDIUM,1,4.0,18,91.768,Abu Dhabi Grand Prix,2023,-1.7920000000000016,-8.857,0,0,0.0517241379310344,0.2352941176470588,0.0",
+        "ALB,4,MEDIUM,1,5.0,18,91.591,Abu Dhabi Grand Prix,2023,-0.1770000000000067,-9.034000000000006,0,0,0.0689655172413793,0.2941176470588235,0.0",
+        "ALB,5,MEDIUM,1,6.0,18,91.422,Abu Dhabi Grand Prix,2023,-0.1689999999999969,-9.203000000000005,0,0,0.0862068965517241,0.3529411764705882,0.0"
+      ]
+    }
+  },
+  {
+    "id": "E5",
+    "tool": "read_file",
+    "arguments": {
+      "path": "README.md"
+    },
+    "result": {
+      "path": "README.md",
+      "total_lines": 16,
+      "content": "   1  # F1 demo project\n   2  \n   3  The audit target for the main demo. It predicts whether a Formula 1 driver pits on the\n   4  next lap, from 52,471 laps of the 2023 and 2024 seasons.\n   5  \n   6  **Provenance:** this project predates the hackathon. `train.py` is adapted from the\n   7  notebook in [f1-pit-stop-prediction](https://github.com/Mr-Freestyler21/f1-pit-stop-prediction),\n   8  keeping the original modelling code and random split unchanged so the auditor has the\n   9  original evaluation to examine. `data/laps.csv` is the F1 Strategy Dataset v2 from Kaggle,\n  10  copied unchanged from that repository.\n  11  \n  12  Run it on its own:\n  13  \n  14  ```bash\n  15  python demo/f1/train.py\n  16  ```"
+    }
+  },
+  {
+    "id": "E6",
+    "tool": "run_check",
+    "arguments": {
+      "check": "A"
+    },
+    "result": {
+      "check_id": "A_preprocessing_before_split",
+      "status": "clear",
+      "summary": "No preprocessing that learns from data saw test rows before the evaluation. Note: LabelEncoder at line 41 was fitted on rows including the test set, but it only learns category names, which carry no information about the labels.",
+      "measurements": {},
+      "evidence": {
+        "preprocessing_fits": [
+          {
+            "class": "LabelEncoder",
+            "method": "fit_transform",
+            "line": 41,
+            "n_rows_seen": 52455
+          }
+        ],
+        "leaks": [],
+        "notes": [
+          {
+            "class": "LabelEncoder",
+            "method": "fit_transform",
+            "line": 41,
+            "n_rows_seen": 52455,
+            "kind": "vocabulary",
+            "basis": "row_labels",
+            "model": "RandomForestClassifier",
+            "rows_source": "model_inputs",
+            "model_fit_line": 52,
+            "predict_line": 55,
+            "n_test": 10491,
+            "test_rows_seen": 10491,
+            "share_of_test_rows_seen": 1.0
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "E7",
+    "tool": "run_check",
+    "arguments": {
+      "check": "C"
+    },
+    "result": {
+      "check_id": "C_group_overlap",
+      "status": "flagged",
+      "summary": "48 of 48 test groups by Year + Race also appear in training (100.0% of test rows); 47.2% of test rows have Year earlier than the latest training data (2024), so the model was trained on their future.",
+      "measurements": {
+        "splits_checked": 1,
+        "splits_flagged": 1,
+        "max_share_of_test_rows_in_shared_groups[Year+Race]": 1.0,
+        "max_share_of_test_rows_before_train_end[Year]": 0.4724
+      },
+      "evidence": {
+        "assumption": "Row labels seen by the model are the data file's row numbers (pandas index from read_csv).",
+        "n_splits": 1,
+        "splits": [
+          {
+            "model": "RandomForestClassifier",
+            "fit_line": 52,
+            "predict_line": 55,
+            "predict_methods": [
+              "predict",
+              "predict_proba"
+            ],
+            "n_train": 41964,
+            "n_test": 10491,
+            "rows_source": "model_inputs",
+            "groups": [
+              {
+                "columns": [
+                  "Year",
+                  "Race"
+                ],
+                "train_groups": 48,
+                "test_groups": 48,
+                "shared_groups": 48,
+                "test_rows": 10491,
+                "test_rows_in_shared_groups": 10491,
+                "share_of_test_rows_in_shared_groups": 1.0,
+                "examples": [
+                  {
+                    "group": "2023 | Monaco Grand Prix",
+                    "train_rows": 1215,
+                    "test_rows": 297
+                  },
+                  {
+                    "group": "2024 | Austrian Grand Prix",
+                    "train_rows": 1132,
+                    "test_rows": 273
+                  },
+                  {
+                    "group": "2024 | Dutch Grand Prix",
+                    "train_rows": 1154,
+                    "test_rows": 272
+                  },
+                  {
+                    "group": "2023 | Austrian Grand Prix",
+                    "train_rows": 1081,
+                    "test_rows": 271
+                  },
+                  {
+                    "group": "2023 | Dutch Grand Prix",
+                    "train_rows": 1041,
+                    "test_rows": 269
+                  }
+                ]
+              }
+            ],
+            "time": {
+              "column": "Year",
+              "train_range": [
+                2023,
+                2024
+              ],
+              "test_range": [
+                2023,
+                2024
+              ],
+              "test_rows": 10491,
+              "test_rows_before_train_end": 4956,
+              "share_of_test_rows_before_train_end": 0.4724,
+              "train_rows_at_or_after_test_start": 41964
+            },
+            "flagged": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "E8",
+    "tool": "run_check",
+    "arguments": {
+      "check": "B",
+      "suspects": [
+        {
+          "column": "LapTime_Delta",
+          "reason": "If computed as difference to a race-level reference that uses full-race data, it could incorporate future laps not known at end of current lap"
+        },
+        {
+          "column": "Cumulative_Degradation",
+          "reason": "If accumulated using statistics that include future laps of the same stint/race, it would not be known at prediction time"
+        },
+        {
+          "column": "RaceProgress",
+          "reason": "If computed from total race laps including information only known at race end, check whether knowable at end of current lap"
+        }
+      ]
+    },
+    "result": {
+      "check_id": "B_future_information",
+      "status": "clear",
+      "summary": "Suspected column(s) 'RaceProgress', 'Cumulative_Degradation', 'LapTime_Delta' were measured and none shows the strong dependence a leak would cause. Shuffling 'Cumulative_Degradation' costs 0.0255 of a 0.1428 margin above chance: modest, as for a useful feature. Whether its value is available in time cannot be shown from the data alone.",
+      "measurements": {
+        "suspects_measured": 3,
+        "suspects_with_strong_dependence": 0,
+        "suspects_with_weak_dependence": 1,
+        "max_metric_drop": 0.0255
+      },
+      "evidence": {
+        "features": [
+          "Compound",
+          "TyreLife",
+          "Position",
+          "LapTime (s)",
+          "RaceProgress",
+          "... 3 more"
+        ],
+        "feature_power": {
+          "Compound": 0.611,
+          "TyreLife": 0.6723,
+          "Position": 0.5194,
+          "LapTime (s)": 0.501,
+          "RaceProgress": 0.5394,
+          "Stint": 0.5635,
+          "LapTime_Delta": 0.5056,
+          "Cumulative_Degradation": 0.5393
+        },
+        "suspects": [
+          {
+            "column": "LapTime_Delta",
+            "source": "llm",
+            "reason": "If computed as difference to a race-level reference that uses full-race data, it could incorporate future laps not known at end of current lap"
+          },
+          {
+            "column": "Cumulative_Degradation",
+            "source": "llm",
+            "reason": "If accumulated using statistics that include future laps of the same stint/race, it would not be known at prediction time"
+          },
+          {
+            "column": "RaceProgress",
+            "source": "llm",
+            "reason": "If computed from total race laps including information only known at race end, check whether knowable at end of current lap"
+          }
+        ],
+        "suspect_notes": {},
+        "shuffle_reruns": [
+          {
+            "column": "RaceProgress",
+            "sources": [
+              "llm"
+            ],
+            "reasons": [
+              "If computed from total race laps including information only known at race end, check whether knowable at end of current lap"
+            ],
+            "single_feature_power": 0.5394,
+            "baseline": 0.9519588218472976,
+            "shuffled": 0.9366123343818511,
+            "metric_drop": 0.0153,
+            "margin_above_chance": 0.1428,
+            "dependence": "none",
+            "error": null,
+            "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194243Z-1040aa"
+          },
+          {
+            "column": "Cumulative_Degradation",
+            "sources": [
+              "llm"
+            ],
+            "reasons": [
+              "If accumulated using statistics that include future laps of the same stint/race, it would not be known at prediction time"
+            ],
+            "single_feature_power": 0.5393,
+            "baseline": 0.9519588218472976,
+            "shuffled": 0.9265084358021161,
+            "metric_drop": 0.0255,
+            "margin_above_chance": 0.1428,
+            "dependence": "weak",
+            "error": null,
+            "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194252Z-31c461"
+          },
+          {
+            "column": "LapTime_Delta",
+            "sources": [
+              "llm"
+            ],
+            "reasons": [
+              "If computed as difference to a race-level reference that uses full-race data, it could incorporate future laps not known at end of current lap"
+            ],
+            "single_feature_power": 0.5056,
+            "baseline": 0.9519588218472976,
+            "shuffled": 0.932894862262892,
+            "metric_drop": 0.0191,
+            "margin_above_chance": 0.1428,
+            "dependence": "none",
+            "error": null,
+            "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194302Z-80bdce"
+          }
+        ],
+        "chance_level": 0.8092
+      }
+    }
+  },
+  {
+    "id": "E9",
+    "tool": "run_with_split",
+    "arguments": {
+      "group_columns": [
+        "Year",
+        "Race"
+      ],
+      "strategy": "group",
+      "test_size": 0.2
+    },
+    "result": {
+      "split": {
+        "strategy": "group",
+        "seed": 42,
+        "group_columns": [
+          "Year",
+          "Race"
+        ],
+        "test_size": 0.2
+      },
+      "metrics": {
+        "accuracy": 0.7053827066234014,
+        "precision": 0.6825499034127496,
+        "recall": 0.29009304871373837,
+        "f1": 0.4071442289226042,
+        "roc_auc": 0.8192623502420061,
+        "majority_class_accuracy": 0.6512693262072915,
+        "test_positive_rate": 0.34873067379270856,
+        "n_train": 41977,
+        "n_test": 10478
+      },
+      "baseline_accuracy": 0.9519588218472976,
+      "change_vs_baseline": -0.2466,
+      "evaluations": [
+        {
+          "model": "RandomForestClassifier",
+          "n_train": 41977,
+          "n_test": 10478,
+          "target_rate_train": 0.1514,
+          "target_rate_test": 0.3487,
+          "majority_class_accuracy_test": 0.6513,
+          "groups": [
+            {
+              "columns": [
+                "Year",
+                "Race"
+              ],
+              "train_groups": 38,
+              "test_groups": 10,
+              "shared_groups": 0
+            }
+          ],
+          "time": {
+            "train_range": [
+              2023,
+              2024
+            ],
+            "test_range": [
+              2023,
+              2024
+            ],
+            "test_rows_before_train_end": 2978
+          }
+        }
+      ],
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194311Z-e3342a"
+    }
+  },
+  {
+    "id": "E10",
+    "tool": "run_with_split",
+    "arguments": {
+      "strategy": "temporal",
+      "test_size": 0.2,
+      "time_column": "Year"
+    },
+    "result": {
+      "split": {
+        "strategy": "temporal",
+        "seed": 42,
+        "time_column": "Year",
+        "test_size": 0.2
+      },
+      "metrics": {
+        "accuracy": 0.6218002251189136,
+        "precision": 0.3799510004083299,
+        "recall": 0.2014069264069264,
+        "f1": 0.26326213042863206,
+        "roc_auc": 0.508732088540569,
+        "majority_class_accuracy": 0.6645001997022622,
+        "test_positive_rate": 0.3354998002977379,
+        "n_train": 24914,
+        "n_test": 27541
+      },
+      "baseline_accuracy": 0.9519588218472976,
+      "change_vs_baseline": -0.3302,
+      "evaluations": [
+        {
+          "model": "RandomForestClassifier",
+          "n_train": 24914,
+          "n_test": 27541,
+          "target_rate_train": 0.0308,
+          "target_rate_test": 0.3355,
+          "majority_class_accuracy_test": 0.6645,
+          "groups": [
+            {
+              "columns": [
+                "Year",
+                "Race"
+              ],
+              "train_groups": 23,
+              "test_groups": 25,
+              "shared_groups": 0
+            }
+          ],
+          "time": {
+            "train_range": [
+              2023,
+              2023
+            ],
+            "test_range": [
+              2024,
+              2024
+            ],
+            "test_rows_before_train_end": 0
+          }
+        }
+      ],
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194324Z-cd67c5"
+    }
+  },
+  {
+    "id": "E11",
+    "tool": "run_with_split",
+    "arguments": {
+      "restrict_to": {
+        "column": "Year",
+        "value": 2024
+      },
+      "strategy": "random",
+      "test_size": 0.2
+    },
+    "result": {
+      "split": {
+        "strategy": "random",
+        "seed": 42,
+        "test_size": 0.2,
+        "restrict": {
+          "column": "Year",
+          "value": 2024
+        }
+      },
+      "metrics": {
+        "accuracy": 0.934640522875817,
+        "precision": 0.9285302593659942,
+        "recall": 0.8722252301028696,
+        "f1": 0.8994974874371859,
+        "roc_auc": 0.980725219824643,
+        "majority_class_accuracy": 0.6646695715323166,
+        "test_positive_rate": 0.33533042846768335,
+        "n_train": 22033,
+        "n_test": 5508
+      },
+      "baseline_accuracy": 0.9519588218472976,
+      "change_vs_baseline": -0.0173,
+      "evaluations": [
+        {
+          "model": "RandomForestClassifier",
+          "n_train": 22033,
+          "n_test": 5508,
+          "target_rate_train": 0.3355,
+          "target_rate_test": 0.3353,
+          "majority_class_accuracy_test": 0.6647,
+          "groups": [
+            {
+              "columns": [
+                "Year",
+                "Race"
+              ],
+              "train_groups": 25,
+              "test_groups": 25,
+              "shared_groups": 25
+            }
+          ],
+          "time": {
+            "train_range": [
+              2024,
+              2024
+            ],
+            "test_range": [
+              2024,
+              2024
+            ],
+            "test_rows_before_train_end": 0
+          }
+        }
+      ],
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194338Z-387c80"
+    }
+  },
+  {
+    "id": "E12",
+    "tool": "run_with_split",
+    "arguments": {
+      "group_columns": [
+        "Year",
+        "Race"
+      ],
+      "restrict_to": {
+        "column": "Year",
+        "value": 2024
+      },
+      "strategy": "group",
+      "test_size": 0.2
+    },
+    "result": {
+      "split": {
+        "strategy": "group",
+        "seed": 42,
+        "group_columns": [
+          "Year",
+          "Race"
+        ],
+        "test_size": 0.2,
+        "restrict": {
+          "column": "Year",
+          "value": 2024
+        }
+      },
+      "metrics": {
+        "accuracy": 0.7211504108610218,
+        "precision": 0.6584575502268308,
+        "recall": 0.49560975609756097,
+        "f1": 0.565544113554133,
+        "roc_auc": 0.7864654769433826,
+        "majority_class_accuracy": 0.6337977849231868,
+        "test_positive_rate": 0.36620221507681316,
+        "n_train": 21943,
+        "n_test": 5598
+      },
+      "baseline_accuracy": 0.9519588218472976,
+      "change_vs_baseline": -0.2308,
+      "evaluations": [
+        {
+          "model": "RandomForestClassifier",
+          "n_train": 21943,
+          "n_test": 5598,
+          "target_rate_train": 0.3277,
+          "target_rate_test": 0.3662,
+          "majority_class_accuracy_test": 0.6338,
+          "groups": [
+            {
+              "columns": [
+                "Year",
+                "Race"
+              ],
+              "train_groups": 20,
+              "test_groups": 5,
+              "shared_groups": 0
+            }
+          ],
+          "time": {
+            "train_range": [
+              2024,
+              2024
+            ],
+            "test_range": [
+              2024,
+              2024
+            ],
+            "test_rows_before_train_end": 0
+          }
+        }
+      ],
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194347Z-1276a9"
+    }
+  },
+  {
+    "id": "E13",
+    "tool": "propose_patch",
+    "arguments": {
+      "edits": [
+        {
+          "new": "from sklearn.model_selection import GroupShuffleSplit",
+          "old": "from sklearn.model_selection import train_test_split"
+        },
+        {
+          "new": "X = ml_data[features]\ny = ml_data[target]\nrace_groups = df.loc[ml_data.index, 'Year'].astype(str) + '|' + df.loc[ml_data.index, 'Race']\ngss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)\ntrain_idx, test_idx = next(gss.split(X, y, groups=race_groups))\nX_train, X_test = X.iloc[train_idx], X.iloc[test_idx]\ny_train, y_test = y.iloc[train_idx], y.iloc[test_idx]",
+          "old": "X = ml_data[features]\ny = ml_data[target]\n\nX_train, X_test, y_train, y_test = train_test_split(\n    X, y, test_size=0.2, random_state=42\n)"
+        }
+      ],
+      "path": "train.py",
+      "rationale": "Replace random row split with GroupShuffleSplit on Year+Race so no race appears in both train and test, matching real use on new races. Model, features and settings unchanged."
+    },
+    "result": {
+      "accepted": true,
+      "patch_id": "P1",
+      "lines_changed": 11,
+      "protected_model_calls": [
+        "RandomForestClassifier"
+      ],
+      "diff": "--- a/train.py\n+++ b/train.py\n@@ -20,7 +20,7 @@\n     recall_score,\n     roc_auc_score,\n )\n-from sklearn.model_selection import train_test_split\n+from sklearn.model_selection import GroupShuffleSplit\n from sklearn.preprocessing import LabelEncoder\n \n HERE = Path(__file__).resolve().parent\n@@ -43,10 +43,11 @@\n # Cell 23\n X = ml_data[features]\n y = ml_data[target]\n-\n-X_train, X_test, y_train, y_test = train_test_split(\n-    X, y, test_size=0.2, random_state=42\n-)\n+race_groups = df.loc[ml_data.index, 'Year'].astype(str) + '|' + df.loc[ml_data.index, 'Race']\n+gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)\n+train_idx, test_idx = next(gss.split(X, y, groups=race_groups))\n+X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]\n+y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]\n \n model_v1 = RandomForestClassifier(n_estimators=100, random_state=42)\n model_v1.fit(X_train, y_train)\n"
+    }
+  },
+  {
+    "id": "E14",
+    "tool": "run_patched",
+    "arguments": {
+      "patch_id": "P1"
+    },
+    "result": {
+      "patch_id": "P1",
+      "metrics": {
+        "accuracy": 0.7053827066234014,
+        "precision": 0.6825499034127496,
+        "recall": 0.29009304871373837,
+        "f1": 0.4071442289226042,
+        "roc_auc": 0.8192623502420061,
+        "majority_class_accuracy": 0.6512693262072915,
+        "test_positive_rate": 0.34873067379270856,
+        "n_train": 41977,
+        "n_test": 10478
+      },
+      "baseline_accuracy": 0.9519588218472976,
+      "change_vs_baseline": -0.2466,
+      "evaluations": [
+        {
+          "model": "RandomForestClassifier",
+          "n_train": 41977,
+          "n_test": 10478,
+          "target_rate_train": 0.1514,
+          "target_rate_test": 0.3487,
+          "majority_class_accuracy_test": 0.6513,
+          "groups": [
+            {
+              "columns": [
+                "Year",
+                "Race"
+              ],
+              "train_groups": 38,
+              "test_groups": 10,
+              "shared_groups": 0
+            }
+          ],
+          "time": {
+            "train_range": [
+              2023,
+              2024
+            ],
+            "test_range": [
+              2023,
+              2024
+            ],
+            "test_rows_before_train_end": 2978
+          }
+        }
+      ],
+      "checks_after_patch": {
+        "A": "clear",
+        "C_groups": "clear",
+        "C_time": "flagged"
+      },
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194410Z-e03844"
+    }
+  }
+]

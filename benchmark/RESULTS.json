@@ -1,0 +1,414 @@
+{
+  "scores": {
+    "All projects": {
+      "rules": {
+        "projects": 20,
+        "recall": {
+          "A": "5/5",
+          "B": "3/4",
+          "C": "4/4"
+        },
+        "precision": "12/12",
+        "clean_false_alarms": "0/7",
+        "exact_match": "19/20",
+        "corrected": "n/a",
+        "mean_abs_error_of_corrected_metric": null,
+        "failures": 0,
+        "median_duration_s": 9.3,
+        "mean_cost_usd": 0
+      },
+      "agent": {
+        "projects": 20,
+        "recall": {
+          "A": "5/5",
+          "B": "3/4",
+          "C": "4/4"
+        },
+        "precision": "12/12",
+        "clean_false_alarms": "0/7",
+        "exact_match": "19/20",
+        "corrected": "13/13",
+        "mean_abs_error_of_corrected_metric": 0.0009,
+        "failures": 0,
+        "median_duration_s": 68.9,
+        "mean_cost_usd": 0.0346
+      },
+      "llm_only": {
+        "projects": 20,
+        "recall": {
+          "A": "5/5",
+          "B": "4/4",
+          "C": "3/4"
+        },
+        "precision": "12/13",
+        "clean_false_alarms": "1/7",
+        "exact_match": "18/20",
+        "corrected": "n/a",
+        "mean_abs_error_of_corrected_metric": 0.0678,
+        "failures": 1,
+        "median_duration_s": 13.4,
+        "mean_cost_usd": 0.0106
+      }
+    },
+    "Development set": {
+      "rules": {
+        "projects": 14,
+        "recall": {
+          "A": "4/4",
+          "B": "2/3",
+          "C": "2/2"
+        },
+        "precision": "8/8",
+        "clean_false_alarms": "0/5",
+        "exact_match": "13/14",
+        "corrected": "n/a",
+        "mean_abs_error_of_corrected_metric": null,
+        "failures": 0,
+        "median_duration_s": 8.8,
+        "mean_cost_usd": 0
+      },
+      "agent": {
+        "projects": 14,
+        "recall": {
+          "A": "4/4",
+          "B": "2/3",
+          "C": "2/2"
+        },
+        "precision": "8/8",
+        "clean_false_alarms": "0/5",
+        "exact_match": "13/14",
+        "corrected": "9/9",
+        "mean_abs_error_of_corrected_metric": 0.0013,
+        "failures": 0,
+        "median_duration_s": 67.2,
+        "mean_cost_usd": 0.033
+      },
+      "llm_only": {
+        "projects": 14,
+        "recall": {
+          "A": "4/4",
+          "B": "3/3",
+          "C": "2/2"
+        },
+        "precision": "9/10",
+        "clean_false_alarms": "1/5",
+        "exact_match": "13/14",
+        "corrected": "n/a",
+        "mean_abs_error_of_corrected_metric": 0.0709,
+        "failures": 0,
+        "median_duration_s": 14.4,
+        "mean_cost_usd": 0.0104
+      }
+    },
+    "Held-out set": {
+      "rules": {
+        "projects": 6,
+        "recall": {
+          "A": "1/1",
+          "B": "1/1",
+          "C": "2/2"
+        },
+        "precision": "4/4",
+        "clean_false_alarms": "0/2",
+        "exact_match": "6/6",
+        "corrected": "n/a",
+        "mean_abs_error_of_corrected_metric": null,
+        "failures": 0,
+        "median_duration_s": 17.0,
+        "mean_cost_usd": 0
+      },
+      "agent": {
+        "projects": 6,
+        "recall": {
+          "A": "1/1",
+          "B": "1/1",
+          "C": "2/2"
+        },
+        "precision": "4/4",
+        "clean_false_alarms": "0/2",
+        "exact_match": "6/6",
+        "corrected": "4/4",
+        "mean_abs_error_of_corrected_metric": 0.0,
+        "failures": 0,
+        "median_duration_s": 81.0,
+        "mean_cost_usd": 0.0383
+      },
+      "llm_only": {
+        "projects": 6,
+        "recall": {
+          "A": "1/1",
+          "B": "1/1",
+          "C": "1/2"
+        },
+        "precision": "3/3",
+        "clean_false_alarms": "0/2",
+        "exact_match": "5/6",
+        "corrected": "n/a",
+        "mean_abs_error_of_corrected_metric": 0.0585,
+        "failures": 1,
+        "median_duration_s": 8.9,
+        "mean_cost_usd": 0.0111
+      }
+    }
+  },
+  "per_project": [
+    {
+      "id": "dev_a_imputer",
+      "split": "dev",
+      "truth": "A (L1.2)",
+      "correct": 0.715625,
+      "rules": "A",
+      "agent": "confirmed A",
+      "patched": "0.7156",
+      "llm_only": "confirmed A",
+      "estimate": "0.7100"
+    },
+    {
+      "id": "dev_a_pandas_scaler",
+      "split": "dev",
+      "truth": "A (L1.2)",
+      "correct": 0.7633333333333333,
+      "rules": "A",
+      "agent": "confirmed A",
+      "patched": "0.7633",
+      "llm_only": "confirmed A",
+      "estimate": "0.7600"
+    },
+    {
+      "id": "dev_a_scaler",
+      "split": "dev",
+      "truth": "A (L1.2)",
+      "correct": 0.70625,
+      "rules": "A",
+      "agent": "confirmed A",
+      "patched": "0.7063",
+      "llm_only": "confirmed A",
+      "estimate": "0.7100"
+    },
+    {
+      "id": "dev_a_selector",
+      "split": "dev",
+      "truth": "A (L1.3)",
+      "correct": 0.753030303030303,
+      "rules": "A",
+      "agent": "confirmed A",
+      "patched": "0.7530",
+      "llm_only": "confirmed A",
+      "estimate": "0.7300"
+    },
+    {
+      "id": "dev_b_future_window",
+      "split": "dev",
+      "truth": "B (L3.1)",
+      "correct": 0.74,
+      "rules": "-",
+      "agent": "inconclusive -",
+      "patched": "0.7517",
+      "llm_only": "confirmed B",
+      "estimate": "0.6000"
+    },
+    {
+      "id": "dev_b_innocuous",
+      "split": "dev",
+      "truth": "B (L2)",
+      "correct": 0.725,
+      "rules": "B",
+      "agent": "confirmed B",
+      "patched": "0.7250",
+      "llm_only": "confirmed B",
+      "estimate": "0.6000"
+    },
+    {
+      "id": "dev_b_obvious",
+      "split": "dev",
+      "truth": "B (L2)",
+      "correct": 0.7863636363636364,
+      "rules": "B",
+      "agent": "confirmed B",
+      "patched": "0.7864",
+      "llm_only": "confirmed B",
+      "estimate": "0.7300"
+    },
+    {
+      "id": "dev_c_groups",
+      "split": "dev",
+      "truth": "C (L3.2)",
+      "correct": 0.68125,
+      "rules": "C",
+      "agent": "confirmed C",
+      "patched": "0.6813",
+      "llm_only": "confirmed C",
+      "estimate": "0.5000"
+    },
+    {
+      "id": "dev_c_time",
+      "split": "dev",
+      "truth": "C (L3.1)",
+      "correct": 0.72,
+      "rules": "C",
+      "agent": "confirmed C",
+      "patched": "0.7200",
+      "llm_only": "confirmed C",
+      "estimate": "0.6200"
+    },
+    {
+      "id": "dev_clean_group_split",
+      "split": "dev",
+      "truth": "clean",
+      "correct": 0.725,
+      "rules": "-",
+      "agent": "not_found -",
+      "patched": "",
+      "llm_only": "not_found -",
+      "estimate": "0.7200"
+    },
+    {
+      "id": "dev_clean_label_encoder",
+      "split": "dev",
+      "truth": "clean",
+      "correct": 0.7954545454545454,
+      "rules": "-",
+      "agent": "not_found -",
+      "patched": "",
+      "llm_only": "confirmed A",
+      "estimate": "0.8000"
+    },
+    {
+      "id": "dev_clean_pipeline_cv",
+      "split": "dev",
+      "truth": "clean",
+      "correct": 0.7109375,
+      "rules": "-",
+      "agent": "not_found -",
+      "patched": "",
+      "llm_only": "not_found -",
+      "estimate": "0.7100"
+    },
+    {
+      "id": "dev_clean_strong_feature",
+      "split": "dev",
+      "truth": "clean",
+      "correct": 0.784375,
+      "rules": "-",
+      "agent": "inconclusive -",
+      "patched": "",
+      "llm_only": "not_found -",
+      "estimate": "0.7800"
+    },
+    {
+      "id": "dev_clean_temporal",
+      "split": "dev",
+      "truth": "clean",
+      "correct": 0.759090909090909,
+      "rules": "-",
+      "agent": "not_found -",
+      "patched": "",
+      "llm_only": "not_found -",
+      "estimate": "0.7600"
+    },
+    {
+      "id": "ho_a_selector",
+      "split": "heldout",
+      "truth": "A (L1.3)",
+      "correct": 0.5577777777777778,
+      "rules": "A",
+      "agent": "confirmed A",
+      "patched": "0.5578",
+      "llm_only": "confirmed A",
+      "estimate": "0.6700"
+    },
+    {
+      "id": "ho_b_innocuous",
+      "split": "heldout",
+      "truth": "B (L2)",
+      "correct": 0.7333333333333333,
+      "rules": "B",
+      "agent": "confirmed B",
+      "patched": "0.7333",
+      "llm_only": "confirmed B",
+      "estimate": "0.7500"
+    },
+    {
+      "id": "ho_c_groups",
+      "split": "heldout",
+      "truth": "C (L3.2)",
+      "correct": 0.6666666666666666,
+      "rules": "C",
+      "agent": "confirmed C",
+      "patched": "0.6667",
+      "llm_only": "confirmed C",
+      "estimate": "0.6200"
+    },
+    {
+      "id": "ho_c_time",
+      "split": "heldout",
+      "truth": "C (L3.1)",
+      "correct": 0.73,
+      "rules": "C",
+      "agent": "confirmed C",
+      "patched": "0.7300",
+      "llm_only": "error",
+      "estimate": ""
+    },
+    {
+      "id": "ho_clean_cv",
+      "split": "heldout",
+      "truth": "clean",
+      "correct": 0.6672222222222223,
+      "rules": "-",
+      "agent": "inconclusive -",
+      "patched": "",
+      "llm_only": "not_found -",
+      "estimate": "0.6700"
+    },
+    {
+      "id": "ho_clean_strong",
+      "split": "heldout",
+      "truth": "clean",
+      "correct": 0.7566666666666667,
+      "rules": "-",
+      "agent": "not_found -",
+      "patched": "",
+      "llm_only": "not_found -",
+      "estimate": "0.7600"
+    }
+  ],
+  "consistency": {
+    "dev_b_innocuous": {
+      "runs": 3,
+      "outcomes": [
+        "confirmed B",
+        "confirmed B",
+        "confirmed B"
+      ],
+      "agree": true
+    },
+    "dev_c_groups": {
+      "runs": 3,
+      "outcomes": [
+        "confirmed C",
+        "confirmed C",
+        "confirmed C"
+      ],
+      "agree": true
+    },
+    "dev_clean_strong_feature": {
+      "runs": 3,
+      "outcomes": [
+        "inconclusive -",
+        "inconclusive -",
+        "inconclusive -"
+      ],
+      "agree": true
+    },
+    "ho_c_time": {
+      "runs": 3,
+      "outcomes": [
+        "confirmed C",
+        "confirmed C",
+        "confirmed C"
+      ],
+      "agree": true
+    }
+  }
+}

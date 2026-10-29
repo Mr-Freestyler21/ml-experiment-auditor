@@ -19,6 +19,28 @@ Built for the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).
 - Phase 4: patch, patched rerun and evidence report. The model proposes a minimal fix to the
   evaluation; code applies it to a copy, rejects any change to the model, reruns it with the
   checks, and writes `report.md` / `report.json` with every number taken from the evidence.
+- Phase 5: a 20-project benchmark against a rules-only baseline and Muse without tools
+  ([results](benchmark/RESULTS.md)), a clean demo project, and [example audits](examples/).
+
+## Results at a glance
+
+On 20 generated projects (14 development, 6 held-out with answer keys locked on GitHub before
+any run), full table in [benchmark/RESULTS.md](benchmark/RESULTS.md):
+
+| | Rules only | **Muse + tools (this auditor)** | Muse only (no tools) |
+|---|---|---|---|
+| Exact answers | 19/20 | **19/20** | 18/20 |
+| False alarms on 7 clean projects | 0 | **0** | 1 |
+| Flawed projects whose fix reached the correct score | n/a | **13/13** | n/a |
+| Mean error of the "corrected" score | n/a | **0.0009** | 0.068 (estimated, not measured) |
+| Same verdict in 3 repeated audits (4 projects) | n/a | **12/12** | n/a |
+| Cost per audit | free | $0.035 | $0.011 |
+
+Rules and the auditor detect equally well on these projects. What only the auditor does is
+measure the corrected evaluation, write the fix, and explain it with cited evidence; Muse
+alone detects most flaws but its estimates of the true score are off by about 7 points.
+
+Example reports: [F1, confirmed](examples/f1/report.md) and [clean project, not found](examples/clean/report.md).
 
 ## Setup
 
@@ -70,7 +92,7 @@ the `prediction_time` sentence. Only audit projects you are comfortable sharing.
 ## Run a full audit
 
 ```bash
-python -m auditor.cli audit demo/f1 --max-tokens 100000
+python -m auditor.cli audit demo/f1
 ```
 
 The Meta model (Muse) reads the project, runs the checks, and re-evaluates the unchanged
@@ -83,9 +105,25 @@ applies them to a copy, checks it compiles and leaves the model's constructor un
 and re-runs checks A and C on it. The report (`report.md`, `report.json`) and an `evidence/`
 folder (transcript, evidence, verdict, patch diff) are saved under `runs/audit-<time>/`.
 
+## Benchmark
+
+```bash
+python -m benchmark.generate                  # 20 projects + answer keys (already committed)
+python -m benchmark.generate --verify-lock    # held-out answer keys unchanged since the lock
+python -m benchmark.run --split dev           # rules, Muse + tools, Muse only
+python -m benchmark.run --split heldout
+python -m benchmark.combine --main <dev run> <heldout run> --repeats <repeats run>
+```
+
+Projects are synthetic tabular datasets in five themes with planted flaws labelled by type in
+the leakage taxonomy of Kapoor & Narayanan (2023), plus clean controls. Answer keys live in
+`benchmark/answers/`, outside the folders the auditor reads, and each project is audited from an
+anonymous copy. Raw runs, reports and transcripts are written to `benchmark/results/` (not
+committed).
+
 ## Tests
 
 ```bash
 python -m pytest -q
-python -m pyflakes auditor tests
+python -m pyflakes auditor tests benchmark/*.py
 ```

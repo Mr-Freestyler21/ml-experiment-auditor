@@ -1,0 +1,135 @@
+{
+  "project": "clean",
+  "verdict": "not_found",
+  "summary": "No evaluation flaw found. Baseline accuracy 0.765625 vs majority 0.68125 with roc_auc 0.7953318942255801 (E5). Preprocessing clear (E6) and grouped split has no patient overlap (E7). B dependence on num_prior_readmissions is strong but legitimate prior history known at discharge.",
+  "stopped_because": "finalized",
+  "baseline": {
+    "metric": "accuracy",
+    "reported": 0.77,
+    "measured": 0.765625,
+    "difference": -0.004375,
+    "status": "reproduced",
+    "random_seed": 0,
+    "environment": {
+      "python": "3.14.3",
+      "packages": {
+        "numpy": "2.4.3",
+        "pandas": "3.0.1",
+        "scikit-learn": "1.8.0"
+      }
+    },
+    "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261029T190453Z-2d68e6"
+  },
+  "context_metrics": {
+    "accuracy": 0.765625,
+    "precision": 0.651685393258427,
+    "recall": 0.5686274509803921,
+    "roc_auc": 0.7953318942255801,
+    "majority_class_accuracy": 0.68125,
+    "test_positive_rate (auditor)": 0.3187,
+    "majority_class_accuracy (auditor)": 0.6813
+  },
+  "findings": [],
+  "patch": null,
+  "evaluations": [
+    {
+      "label": "Original evaluation (rerun)",
+      "evidence_id": "E5",
+      "accuracy": 0.765625,
+      "change_vs_baseline": 0.0,
+      "majority_class_accuracy_test": 0.68125,
+      "target_rate_train": null,
+      "target_rate_test": null,
+      "shared_groups": null,
+      "checks_after_patch": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261029T190453Z-2d68e6"
+    }
+  ],
+  "caveats": [
+    {
+      "evidence_ids": [
+        "E8",
+        "E2"
+      ],
+      "text": "Check B flagged dependence on num_prior_readmissions, but this column is prior history known at discharge per prediction-time definition, not future information, so not a leak"
+    }
+  ],
+  "limits": [],
+  "cost": {
+    "model": "muse-spark-1.3",
+    "steps": 5,
+    "duration_s": 48.1,
+    "calls": 5,
+    "tokens": 20210,
+    "cap": 200000,
+    "est_cost_usd": 0.020083
+  },
+  "evidence_index": [
+    {
+      "id": "E1",
+      "tool": "list_files",
+      "arguments": {},
+      "brief": "4 files"
+    },
+    {
+      "id": "E2",
+      "tool": "read_file",
+      "arguments": {
+        "path": "train.py"
+      },
+      "brief": "read train.py"
+    },
+    {
+      "id": "E3",
+      "tool": "read_file",
+      "arguments": {
+        "path": "README.md"
+      },
+      "brief": "read README.md"
+    },
+    {
+      "id": "E4",
+      "tool": "read_file",
+      "arguments": {
+        "path": "data.csv"
+      },
+      "brief": "read data.csv"
+    },
+    {
+      "id": "E5",
+      "tool": "run_baseline",
+      "arguments": {},
+      "brief": "reproduced, measured 0.7656"
+    },
+    {
+      "id": "E6",
+      "tool": "run_check",
+      "arguments": {
+        "check": "A"
+      },
+      "brief": "clear: No preprocessing was fitted outside the evaluated models (e.g. all of it sits inside a pipeline)."
+    },
+    {
+      "id": "E7",
+      "tool": "run_check",
+      "arguments": {
+        "check": "C"
+      },
+      "brief": "clear: 0 of 40 test groups by patient_id also appear in training (0.0% of test rows)."
+    },
+    {
+      "id": "E8",
+      "tool": "run_check",
+      "arguments": {
+        "check": "B",
+        "suspects": [
+          {
+            "column": "num_prior_readmissions",
+            "reason": "Strong predictor of readmission; verify whether known at discharge or derived from future readmission label"
+          }
+        ]
+      },
+      "brief": "flagged: Shuffling 'num_prior_readmissions' drops accuracy from 0.7656 to 0.6438 (+0.1219 lost), and it is suspected of not being known at prediction time (Strong predictor of readmission; verify whether known at discharge or derived from future readmission label)."
+    }
+  ]
+}

@@ -1,0 +1,351 @@
+{
+  "project": "f1",
+  "verdict": "confirmed",
+  "summary": "Reported accuracy does not hold for new races. Grouped Year+Race evaluation gives much lower accuracy near its baseline, confirming race-group leakage.",
+  "stopped_because": "finalized",
+  "baseline": {
+    "metric": "accuracy",
+    "reported": 0.95,
+    "measured": 0.9519588218472976,
+    "difference": 0.001959,
+    "status": "reproduced",
+    "random_seed": 42,
+    "environment": {
+      "python": "3.14.3",
+      "packages": {
+        "numpy": "2.4.3",
+        "pandas": "3.0.1",
+        "scikit-learn": "1.8.0"
+      }
+    },
+    "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194159Z-713da9"
+  },
+  "context_metrics": {
+    "accuracy": 0.9519588218472976,
+    "precision": 0.9208754208754208,
+    "recall": 0.8188622754491018,
+    "f1": 0.866877971473851,
+    "roc_auc": 0.985049607395319,
+    "majority_class_accuracy": 0.8089791249642551,
+    "test_positive_rate (auditor)": 0.191,
+    "majority_class_accuracy (auditor)": 0.809
+  },
+  "findings": [
+    {
+      "evidence_ids": [
+        "E7",
+        "E11",
+        "E12",
+        "E14"
+      ],
+      "explanation": "Random split shared every Year+Race between train and test. On the same 2024-only data, random-split accuracy stays high while group-split accuracy is much lower with similar target rates, isolating race-group leakage. Grouped evaluation clears the group overlap.",
+      "family": "C",
+      "title": "Random split leaks race groups; performance collapses on new races",
+      "family_name": "Same entities or later periods in train and test",
+      "code": [
+        {
+          "line": 47,
+          "role": "rows assigned to train and test",
+          "code": "X_train, X_test, y_train, y_test = train_test_split("
+        },
+        {
+          "line": 52,
+          "role": "model fitted on the training rows",
+          "code": "model_v1.fit(X_train, y_train)"
+        },
+        {
+          "line": 55,
+          "role": "model evaluated on the test rows",
+          "code": "y_pred_v1 = model_v1.predict(X_test)"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "E7",
+          "tool": "run_check",
+          "brief": "flagged: 48 of 48 test groups by Year + Race also appear in training (100.0% of test rows); 47.2% of test rows have Year earlier than the latest training data (2024), so the model was trained on their future."
+        },
+        {
+          "id": "E11",
+          "tool": "run_with_split",
+          "brief": "accuracy 0.9346 (change -0.0173)"
+        },
+        {
+          "id": "E12",
+          "tool": "run_with_split",
+          "brief": "accuracy 0.7212 (change -0.2308)"
+        },
+        {
+          "id": "E14",
+          "tool": "run_patched",
+          "brief": "accuracy 0.7054 (change -0.2466), checks after patch {'A': 'clear', 'C_groups': 'clear', 'C_time': 'flagged'}"
+        }
+      ]
+    }
+  ],
+  "patch": {
+    "id": "P1",
+    "path": "train.py",
+    "rationale": "Replace random row split with GroupShuffleSplit on Year+Race so no race appears in both train and test, matching real use on new races. Model, features and settings unchanged.",
+    "lines_changed": 11,
+    "diff": "--- a/train.py\n+++ b/train.py\n@@ -20,7 +20,7 @@\n     recall_score,\n     roc_auc_score,\n )\n-from sklearn.model_selection import train_test_split\n+from sklearn.model_selection import GroupShuffleSplit\n from sklearn.preprocessing import LabelEncoder\n \n HERE = Path(__file__).resolve().parent\n@@ -43,10 +43,11 @@\n # Cell 23\n X = ml_data[features]\n y = ml_data[target]\n-\n-X_train, X_test, y_train, y_test = train_test_split(\n-    X, y, test_size=0.2, random_state=42\n-)\n+race_groups = df.loc[ml_data.index, 'Year'].astype(str) + '|' + df.loc[ml_data.index, 'Race']\n+gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)\n+train_idx, test_idx = next(gss.split(X, y, groups=race_groups))\n+X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]\n+y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]\n \n model_v1 = RandomForestClassifier(n_estimators=100, random_state=42)\n model_v1.fit(X_train, y_train)\n"
+  },
+  "evaluations": [
+    {
+      "label": "Original evaluation (rerun)",
+      "evidence_id": "E3",
+      "accuracy": 0.9519588218472976,
+      "change_vs_baseline": 0.0,
+      "majority_class_accuracy_test": 0.8089791249642551,
+      "target_rate_train": null,
+      "target_rate_test": null,
+      "shared_groups": null,
+      "checks_after_patch": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194159Z-713da9"
+    },
+    {
+      "label": "Group split by Year + Race",
+      "evidence_id": "E9",
+      "accuracy": 0.7053827066234014,
+      "change_vs_baseline": -0.2466,
+      "majority_class_accuracy_test": 0.6513,
+      "target_rate_train": 0.1514,
+      "target_rate_test": 0.3487,
+      "shared_groups": 0,
+      "checks_after_patch": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194311Z-e3342a"
+    },
+    {
+      "label": "Temporal split on Year",
+      "evidence_id": "E10",
+      "accuracy": 0.6218002251189136,
+      "change_vs_baseline": -0.3302,
+      "majority_class_accuracy_test": 0.6645,
+      "target_rate_train": 0.0308,
+      "target_rate_test": 0.3355,
+      "shared_groups": 0,
+      "checks_after_patch": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194324Z-cd67c5"
+    },
+    {
+      "label": "Random split, only Year = 2024",
+      "evidence_id": "E11",
+      "accuracy": 0.934640522875817,
+      "change_vs_baseline": -0.0173,
+      "majority_class_accuracy_test": 0.6647,
+      "target_rate_train": 0.3355,
+      "target_rate_test": 0.3353,
+      "shared_groups": 25,
+      "checks_after_patch": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194338Z-387c80"
+    },
+    {
+      "label": "Group split by Year + Race, only Year = 2024",
+      "evidence_id": "E12",
+      "accuracy": 0.7211504108610218,
+      "change_vs_baseline": -0.2308,
+      "majority_class_accuracy_test": 0.6338,
+      "target_rate_train": 0.3277,
+      "target_rate_test": 0.3662,
+      "shared_groups": 0,
+      "checks_after_patch": null,
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194347Z-1276a9"
+    },
+    {
+      "label": "Patched script (P1)",
+      "evidence_id": "E14",
+      "accuracy": 0.7053827066234014,
+      "change_vs_baseline": -0.2466,
+      "majority_class_accuracy_test": 0.6513,
+      "target_rate_train": 0.1514,
+      "target_rate_test": 0.3487,
+      "shared_groups": 0,
+      "checks_after_patch": {
+        "A": "clear",
+        "C_groups": "clear",
+        "C_time": "flagged"
+      },
+      "log_dir": "C:\\Users\\PHILIP\\Downloads\\meta-hackathon\\ml-auditor\\runs\\20261028T194410Z-e03844"
+    }
+  ],
+  "caveats": [
+    {
+      "evidence_ids": [
+        "E10"
+      ],
+      "text": "Temporal evaluation is confounded by label shift with very different train and test target rates, so it does not isolate leakage."
+    },
+    {
+      "evidence_ids": [
+        "E14"
+      ],
+      "text": "Patched grouped split still mixes years in train and test, so residual forward-looking time overlap remains."
+    }
+  ],
+  "limits": [],
+  "cost": {
+    "model": "muse-spark-1.3",
+    "steps": 8,
+    "duration_s": 157.1,
+    "calls": 8,
+    "tokens": 57006,
+    "cap": 200000,
+    "est_cost_usd": 0.051486
+  },
+  "evidence_index": [
+    {
+      "id": "E1",
+      "tool": "read_file",
+      "arguments": {
+        "path": "train.py"
+      },
+      "brief": "read train.py"
+    },
+    {
+      "id": "E2",
+      "tool": "list_files",
+      "arguments": {},
+      "brief": "4 files"
+    },
+    {
+      "id": "E3",
+      "tool": "run_baseline",
+      "arguments": {},
+      "brief": "reproduced, measured 0.9520"
+    },
+    {
+      "id": "E4",
+      "tool": "read_file",
+      "arguments": {
+        "path": "data/laps.csv"
+      },
+      "brief": "read data/laps.csv"
+    },
+    {
+      "id": "E5",
+      "tool": "read_file",
+      "arguments": {
+        "path": "README.md"
+      },
+      "brief": "read README.md"
+    },
+    {
+      "id": "E6",
+      "tool": "run_check",
+      "arguments": {
+        "check": "A"
+      },
+      "brief": "clear: No preprocessing that learns from data saw test rows before the evaluation. Note: LabelEncoder at line 41 was fitted on rows including the test set, but it only learns category names, which carry no information about the labels."
+    },
+    {
+      "id": "E7",
+      "tool": "run_check",
+      "arguments": {
+        "check": "C"
+      },
+      "brief": "flagged: 48 of 48 test groups by Year + Race also appear in training (100.0% of test rows); 47.2% of test rows have Year earlier than the latest training data (2024), so the model was trained on their future."
+    },
+    {
+      "id": "E8",
+      "tool": "run_check",
+      "arguments": {
+        "check": "B",
+        "suspects": [
+          {
+            "column": "LapTime_Delta",
+            "reason": "If computed as difference to a race-level reference that uses full-race data, it could incorporate future laps not known at end of current lap"
+          },
+          {
+            "column": "Cumulative_Degradation",
+            "reason": "If accumulated using statistics that include future laps of the same stint/race, it would not be known at prediction time"
+          },
+          {
+            "column": "RaceProgress",
+            "reason": "If computed from total race laps including information only known at race end, check whether knowable at end of current lap"
+          }
+        ]
+      },
+      "brief": "clear: Suspected column(s) 'RaceProgress', 'Cumulative_Degradation', 'LapTime_Delta' were measured and none shows the strong dependence a leak would cause. Shuffling 'Cumulative_Degradation' costs 0.0255 of a 0.1428 margin above chance: modest, as for a useful feature. Whether its value is available in time cannot be shown from the data alone."
+    },
+    {
+      "id": "E9",
+      "tool": "run_with_split",
+      "arguments": {
+        "group_columns": [
+          "Year",
+          "Race"
+        ],
+        "strategy": "group",
+        "test_size": 0.2
+      },
+      "brief": "accuracy 0.7054 (change -0.2466)"
+    },
+    {
+      "id": "E10",
+      "tool": "run_with_split",
+      "arguments": {
+        "strategy": "temporal",
+        "test_size": 0.2,
+        "time_column": "Year"
+      },
+      "brief": "accuracy 0.6218 (change -0.3302)"
+    },
+    {
+      "id": "E11",
+      "tool": "run_with_split",
+      "arguments": {
+        "restrict_to": {
+          "column": "Year",
+          "value": 2024
+        },
+        "strategy": "random",
+        "test_size": 0.2
+      },
+      "brief": "accuracy 0.9346 (change -0.0173)"
+    },
+    {
+      "id": "E12",
+      "tool": "run_with_split",
+      "arguments": {
+        "group_columns": [
+          "Year",
+          "Race"
+        ],
+        "restrict_to": {
+          "column": "Year",
+          "value": 2024
+        },
+        "strategy": "group",
+        "test_size": 0.2
+      },
+      "brief": "accuracy 0.7212 (change -0.2308)"
+    },
+    {
+      "id": "E13",
+      "tool": "propose_patch",
+      "arguments": {
+        "edits": [
+          {
+            "new": "from sklearn.model_selection import GroupShuffleSplit",
+            "old": "from sklearn.model_selection import train_test_split"
+          },
+          {
+            "new": "X = ml_data[features]\ny = ml_data[target]\nrace_groups = df.loc[ml_data.index, 'Year'].astype(str) + '|' + df.loc[ml_data.index, 'Race']\ngss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)\ntrain_idx, test_idx = next(gss.split(X, y, groups=race_groups))\nX_train, X_test = X.iloc[train_idx], X.iloc[test_idx]\ny_train, y_test = y.iloc[train_idx], y.iloc[test_idx]",
+            "old": "X = ml_data[features]\ny = ml_data[target]\n\nX_train, X_test, y_train, y_test = train_test_split(\n    X, y, test_size=0.2, random_state=42\n)"
+          }
+        ],
+        "path": "train.py",
+        "rationale": "Replace random row split with GroupShuffleSplit on Year+Race so no race appears in both train and test, matching real use on new races. Model, features and settings unchanged."
+      },
+      "brief": "accepted as P1"
+    },
+    {
+      "id": "E14",
+      "tool": "run_patched",
+      "arguments": {
+        "patch_id": "P1"
+      },
+      "brief": "accuracy 0.7054 (change -0.2466), checks after patch {'A': 'clear', 'C_groups': 'clear', 'C_time': 'flagged'}"
+    }
+  ]
+}

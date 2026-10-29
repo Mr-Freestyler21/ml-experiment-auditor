@@ -107,7 +107,16 @@ def main() -> None:
     write_summary(out, records, answers, all_ids)
 
 
-def write_summary(out: Path, records: list[dict[str, Any]], answers: dict[str, dict[str, Any]], ids: list[str]) -> None:
+def write_summary(
+    out: Path,
+    records: list[dict[str, Any]],
+    answers: dict[str, dict[str, Any]],
+    ids: list[str],
+    consistency_records: list[dict[str, Any]] | None = None,
+    extra_notes: list[str] = (),
+    name: str = "results",
+) -> None:
+    """Write <name>.md and <name>.json into `out`. Repeats come from `consistency_records` (default: `records`)."""
     scores = {
         "All projects": scoring.score(records, answers, None),
         "Development set": scoring.score(records, answers, "dev"),
@@ -151,12 +160,13 @@ def write_summary(out: Path, records: list[dict[str, Any]], answers: dict[str, d
             "dev_a_pandas_scaler is included as a known limit: the tracer only sees scikit-learn.",
             "Some planted preprocessing flaws have almost no effect on the score (their correct metric equals the "
             "reported one); they are still flaws in procedure.",
+            *extra_notes,
         ],
     }
-    md = scoring.markdown(scores, per_project, scoring.consistency(records), meta)
-    (out / "results.md").write_text(md, encoding="utf-8")
-    save(out / "results.json", {"scores": scores, "per_project": per_project,
-                                "consistency": scoring.consistency(records)})
+    consistency = scoring.consistency(records if consistency_records is None else consistency_records)
+    md = scoring.markdown(scores, per_project, consistency, meta)
+    (out / f"{name}.md").write_text(md, encoding="utf-8")
+    save(out / f"{name}.json", {"scores": scores, "per_project": per_project, "consistency": consistency})
     print(md)
 
 

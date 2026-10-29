@@ -12,6 +12,7 @@ benchmark/answers/ and are only read here, for scoring.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import traceback
@@ -56,14 +57,16 @@ def main() -> None:
     out = RESULTS / (args.name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
     python = ensure_sandbox_python(REPO / ".sandbox-venv", REPO / "sandbox-requirements.txt")
 
-    # Anonymous working copies.
-    anon = {pid: f"p{n:02d}" for n, pid in enumerate(ids, 1)}
+    # Anonymous working copies, named by a hash so reruns into the same folder never collide.
+    anon = {pid: "p" + hashlib.sha1(pid.encode()).hexdigest()[:6] for pid in ids}
     for pid, name in anon.items():
         target = out / "work" / name
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(PROJECTS / pid, target)
-    save(out / "mapping.json", anon)
+    mapping_path = out / "mapping.json"
+    previous = json.loads(mapping_path.read_text()) if mapping_path.exists() else {}
+    save(mapping_path, {**previous, **anon})
 
     tasks = [(pid, system, k) for pid in ids for system in systems
              for k in range(args.repeats if system == "agent" else 1)]
@@ -90,17 +93,18 @@ def main() -> None:
         save(out / "raw" / f"{pid}__{system}__{k}.json", record)
         return record
 
-    records = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(run_one, *t) for t in tasks]
         for future in as_completed(futures):
             r = future.result()
             res = r["result"]
             status = res.get("error") or f"{res.get('verdict', '')} flags={res.get('families')}"
-            print(f"  {r['id']:28s} {r['system']:9s} r{r['repeat']}  {str(status)[:90]}")
-            records.append(r)
+            print(f"  {r['id']:28s} {r['system']:9s} r{r['repeat']}  {str(status)[:90]}", flush=True)
 
-    write_summary(out, records, answers, ids)
+    # Summarise every run in the folder, so a rerun of a few projects updates the full table.
+    records = [json.loads(p.read_text(encoding="utf-8")) for p in sorted((out / "raw").glob("*.json"))]
+    all_ids = [i for i in answers if any(r["id"] == i for r in records)]
+    write_summary(out, records, answers, all_ids)
 
 
 def write_summary(out: Path, records: list[dict[str, Any]], answers: dict[str, dict[str, Any]], ids: list[str]) -> None:

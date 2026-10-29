@@ -20,6 +20,8 @@ BASE_URL = "https://api.meta.ai/v1"
 DEFAULT_MODEL = "muse-spark-1.3"
 DEFAULT_MAX_TOKENS = 20_000
 MAX_OUTPUT_PER_REQUEST = 4_000
+# Extra waits (seconds) after the SDK's own quick retries fail, to ride out network outages.
+OUTAGE_WAITS_S = (30, 60, 120)
 
 # USD per 1M tokens: (input, cached input, output). From dev.meta.ai/docs/pricing-rate-limits.
 PRICES: dict[str, tuple[float, float, float]] = {
@@ -147,7 +149,7 @@ class MetaLLMClient(LLMClient):
             request["previous_response_id"] = previous_response_id
 
         start = time.perf_counter()
-        response = self._client.responses.create(**request)
+        response = self._create_with_patience(request)
         u = response.usage
         usage = {
             "input": u.input_tokens,
@@ -166,6 +168,23 @@ class MetaLLMClient(LLMClient):
         return LLMResponse(
             id=response.id, text=response.output_text or "", tool_calls=calls, usage=usage, output_items=items
         )
+
+    def _create_with_patience(self, request: dict[str, Any]) -> Any:
+        """The SDK's own retries cover a few seconds. Network drops can last minutes, so after
+        those are used up, wait longer (OUTAGE_WAITS_S) before each further attempt. Errors in the
+        request itself (400, 401, ...) are not retried."""
+        import openai
+
+        transient = (openai.APIConnectionError, openai.APITimeoutError, openai.InternalServerError,
+                     openai.RateLimitError)
+        for wait in (*OUTAGE_WAITS_S, None):
+            try:
+                return self._client.responses.create(**request)
+            except transient:
+                if wait is None:
+                    raise
+                time.sleep(wait)
+        raise AssertionError("unreachable")
 
 
 class ScriptedLLMClient(LLMClient):

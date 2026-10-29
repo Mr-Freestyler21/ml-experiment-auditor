@@ -33,6 +33,8 @@ Rules:
 - Every number you write must come from a tool result. Do not calculate differences or
   percentages yourself; if no tool returned it, say it in words.
 - A score drop alone is never proof. "confirmed" needs a flagged check; cite its evidence id.
+- A flagged check describes a flaw in procedure. Confirm it even when the fix barely changes the
+  score, and report the measured effect (for example "the fix changes accuracy by 0.0000").
 - "inconclusive" is a good answer when the evidence is insufficient.
 - "not_found" claims there is no flaw. If you noticed a possible flaw that no check measured,
   answer "inconclusive" and describe the suspicion in a caveat instead.

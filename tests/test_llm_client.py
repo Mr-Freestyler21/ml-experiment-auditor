@@ -48,6 +48,49 @@ def test_scripted_client_records_requests_and_usage():
     assert client.budget.summary()["calls"] == 1
 
 
+def _client_with_fake_api(monkeypatch, make_failures):
+    """A MetaLLMClient whose API raises make_failures(request) in order, then succeeds."""
+    import httpx2
+
+    from auditor.agent import llm_client
+
+    monkeypatch.setattr(llm_client, "OUTAGE_WAITS_S", (0, 0, 0))
+    client = llm_client.MetaLLMClient(api_key="fake-key-for-tests")
+    failures = make_failures(httpx2.Request("POST", "https://api.meta.ai/v1/responses"))
+    calls = []
+
+    def create(**request):
+        calls.append(request)
+        if len(calls) <= len(failures):
+            raise failures[len(calls) - 1]
+        return "response"
+
+    monkeypatch.setattr(client._client.responses, "create", create)
+    return client, calls
+
+
+def test_network_outages_are_retried_patiently(monkeypatch):
+    import openai
+
+    client, calls = _client_with_fake_api(
+        monkeypatch, lambda req: [openai.APIConnectionError(request=req), openai.APIConnectionError(request=req)])
+
+    assert client._create_with_patience({"model": "m"}) == "response"
+    assert len(calls) == 3
+
+
+def test_request_errors_are_not_retried(monkeypatch):
+    import httpx2
+    import openai
+
+    client, calls = _client_with_fake_api(monkeypatch, lambda req: [
+        openai.BadRequestError("bad", response=httpx2.Response(400, request=req), body=None)])
+
+    with pytest.raises(openai.BadRequestError):
+        client._create_with_patience({"model": "m"})
+    assert len(calls) == 1
+
+
 def test_no_key_means_no_client(tmp_path, monkeypatch):
     monkeypatch.delenv("META_MODEL_API_KEY", raising=False)
     (tmp_path / ".env").write_text("META_MODEL_API_KEY=\n", encoding="utf-8")

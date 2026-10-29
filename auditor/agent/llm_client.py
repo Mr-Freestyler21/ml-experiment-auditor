@@ -83,8 +83,10 @@ class LLMResponse:
     output_items: list[dict[str, Any]] = field(default_factory=list)
 
     def history_items(self) -> list[dict[str, Any]]:
+        """Items to append to the conversation history. Reasoning items are left out: they refer
+        to server-side state that expires, and sending them back later fails with a 400."""
         if self.output_items:
-            return self.output_items
+            return [item for item in self.output_items if item.get("type") != "reasoning"]
         return [{"type": "function_call", "call_id": c.call_id, "name": c.name, "arguments": c.raw_arguments}
                 for c in self.tool_calls]
 

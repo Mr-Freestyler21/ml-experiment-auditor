@@ -48,6 +48,16 @@ def test_scripted_client_records_requests_and_usage():
     assert client.budget.summary()["calls"] == 1
 
 
+def test_history_leaves_out_expiring_reasoning_items():
+    from auditor.agent.llm_client import LLMResponse
+
+    items = [{"type": "reasoning", "id": "rs_1"}, {"type": "message", "content": []},
+             {"type": "function_call", "call_id": "c1", "name": "t", "arguments": "{}"}]
+    response = LLMResponse(id="r", text="", tool_calls=[], usage={}, output_items=items)
+
+    assert [i["type"] for i in response.history_items()] == ["message", "function_call"]
+
+
 def _client_with_fake_api(monkeypatch, make_failures):
     """A MetaLLMClient whose API raises make_failures(request) in order, then succeeds."""
     import httpx2

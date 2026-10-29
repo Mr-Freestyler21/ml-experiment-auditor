@@ -36,8 +36,10 @@ Rules:
 - A flagged check A or C describes a flaw in procedure. Confirm it even when the fix barely changes
   the score, and report the measured effect (for example "the fix changes accuracy by 0.0000").
 - A flagged check B only shows the result depends strongly on a suspected column. Confirm it when
-  the column would not be known at prediction time, or is a near-copy of the label with no plausible
-  legitimate meaning. A strong feature that is legitimately known at prediction time is not a leak.
+  the column clearly would not be known at prediction time, or is a near-copy of the label with no
+  plausible legitimate meaning. If it only might not be known (it depends on details you cannot
+  check), answer inconclusive and put the open question in a caveat. A strong feature that is
+  legitimately known at prediction time is not a leak.
 - "inconclusive" is a good answer when the evidence is insufficient.
 - "not_found" claims there is no flaw. If you noticed a possible flaw that no check measured,
   answer "inconclusive" and describe the suspicion in a caveat instead.

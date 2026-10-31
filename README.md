@@ -35,6 +35,9 @@ investigation step by step, and read the report when it finishes. It runs only o
 python -m auditor.cli serve           # opens http://127.0.0.1:8000
 ```
 
+On Windows you can also double-click `start_web.bat`, or in VS Code use
+**Terminal > Run Task > ML Auditor: open web page**.
+
 Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
 [clean project report](examples/clean/report.md) (not found). Each folder also has a
 `report.html`: download it and open it in a browser.

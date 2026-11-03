@@ -94,7 +94,8 @@ def run_agent(
 
             # 2. No tool call: remind it to use tools or finalize.
             if not response.tool_calls:
-                history.append({"role": "user", "content": prompts.NUDGE})
+                nudge = prompts.TRUNCATED if response.truncated else prompts.NUDGE
+                history.append({"role": "user", "content": nudge})
                 continue
 
             # 3. Run every requested tool; add all results to the history, in call order.

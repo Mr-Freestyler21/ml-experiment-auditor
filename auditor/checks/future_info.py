@@ -275,8 +275,10 @@ def check_future_info(
 
     chance = chance_level(config.reported_metric, data[config.target])
     evidence["chance_level"] = chance
-    # Columns the code proves are built from later rows first, then by single-feature power.
-    ranked = sorted(by_column, key=lambda c: (c not in code_evidence, -(power.get(c) or 0)))
+    # The columns the investigator asked about first (so code-flagged columns cannot crowd them out),
+    # then columns the code shows are built from later rows, then by single-feature power.
+    asked = {s.column for s in suspects if s.source == "llm"}
+    ranked = sorted(by_column, key=lambda c: (c not in asked, c not in code_evidence, -(power.get(c) or 0)))
     findings, skipped = [], ranked[max_reruns:]
     for col in ranked[:max_reruns]:
         if rerun is not None:

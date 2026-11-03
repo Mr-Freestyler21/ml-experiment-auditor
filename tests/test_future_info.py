@@ -184,3 +184,20 @@ def test_unknown_features_are_not_applicable(tmp_path, sandbox):
     project = make_project(tmp_path / "p", ["age"])
 
     assert check_future_info(load_config(project), sandbox, make_data(), None, {}, []).status == "not_applicable"
+
+
+def test_asked_suspects_are_measured_before_code_flagged_columns(tmp_path, sandbox):
+    project = make_project(tmp_path / "p", ["age", "noise", "cancelled_after"])
+    code = {c: {"file": "prepare.py", "line": 3, "code": "", "pattern": "centred rolling window"}
+            for c in ("age", "noise")}
+    measured = []
+
+    def rerun(column):
+        measured.append(column)
+        return {"accuracy": 0.8}, None, None
+
+    check_future_info(load_config(project), sandbox, make_data(), ["age", "noise", "cancelled_after"],
+                      {"accuracy": 0.8}, [Suspect("cancelled_after", "llm", "recorded later")],
+                      max_reruns=1, rerun=rerun, code_evidence=code)
+
+    assert measured == ["cancelled_after"]

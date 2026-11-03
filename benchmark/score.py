@@ -6,7 +6,10 @@ import statistics
 from collections import defaultdict
 from typing import Any
 
-FAMILIES = ("A", "B", "C")
+FAMILIES = ("A", "B", "C")  # families with planted flaws (recall is reported for these)
+# Every family a system can flag. No project has a planted D or E flaw, so a D or E flag
+# counts against precision (and as a false alarm on a clean control).
+ALL_FAMILIES = ("A", "B", "C", "D", "E")
 SYSTEM_NAMES = {"rules": "Rules only", "agent": "Muse + tools (auditor)", "llm_only": "Muse only (no tools)"}
 # A patched evaluation counts as corrected when it lands this close to the answer key's correct metric.
 CORRECTION_TOLERANCE = 0.02
@@ -30,7 +33,7 @@ def score(results: list[dict[str, Any]], answers: dict[str, dict[str, Any]], spl
             flagged = set(res.get("families", []))
             if res.get("error") or res.get("stopped_because") not in (None, "finalized"):
                 failures += 1
-            for f in FAMILIES:
+            for f in ALL_FAMILIES:
                 tp[f] += f in flagged and f in truth
                 fp[f] += f in flagged and f not in truth
                 fn[f] += f in truth and f not in flagged

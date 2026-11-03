@@ -73,3 +73,5 @@ def task_message(config: AuditConfig) -> str:
 
 
 NUDGE = "Continue the audit by calling a tool. When you are done, call finalize."
+TRUNCATED = ("Your reply ran out of room before you called a tool. Act now with one smaller step: for example "
+             "one propose_patch call for one file, then the next file in a later step.")

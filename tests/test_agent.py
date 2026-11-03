@@ -349,3 +349,15 @@ def test_run_patched_rejects_two_patches_to_one_file(pipeline_session):
     result = s.call("run_patched", {"patch_ids": ["P1", "P2"]})
 
     assert "same file" in result["error"]
+
+
+def test_a_reply_cut_off_before_any_tool_call_gets_a_smaller_step_nudge(session, tmp_path):
+    from auditor.agent import prompts
+
+    cut = LLMResponse(id="r1", text="", tool_calls=[], usage={"input": 1, "cached": 0, "output": 1, "reasoning": 0,
+                                                               "total": 2}, truncated=True)
+    client = ScriptedLLMClient([cut, turn(2, ("list_files", {}))])
+
+    run_agent(session, client, tmp_path / "audit", max_steps=2)
+
+    assert prompts.TRUNCATED in json.dumps(client.requests[1]["input"])

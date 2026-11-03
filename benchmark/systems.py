@@ -5,7 +5,7 @@
   llm_only  Muse reads the code, config and a data sample and answers in one go,
             with no tools and no measurements.
 
-Each returns the families it flags (A, B, C) plus details. A system "flags" a family
+Each returns the families it flags (A to E) plus details. A system "flags" a family
 only when it commits to it: a flagged check (rules), a confirmed finding (agent), or a
 listed flaw (llm_only).
 """
@@ -23,9 +23,12 @@ from auditor.agent.llm_client import LLMClient
 from auditor.agent.loop import run_agent
 from auditor.agent.tools import load_session
 from auditor.baseline import run_baseline
+from auditor.checks.code_review import review_project
+from auditor.checks.duplicates import check_shared_rows
 from auditor.checks.future_info import check_future_info, feature_power, rules_suspects
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.checks.preprocessing import check_preprocessing
+from auditor.checks.selection import check_selection
 from auditor.config import AuditConfig
 from auditor.report import write_report
 from auditor.sandbox import Sandbox
@@ -52,6 +55,9 @@ def run_rules(config: AuditConfig, sandbox: Sandbox) -> dict[str, Any]:
                                  (config.project_dir / config.entry_script).read_text(encoding="utf-8")),
         "B": check_future_info(config, sandbox, data, features, plain.metrics, suspects),
         "C": check_group_overlap(data, traced.splits, config.group_columns, config.time_column, incomplete),
+        "D": check_shared_rows(data, traced.splits, config.time_column, incomplete),
+        "E": check_selection(traced.splits, review_project(config.project_dir, config.entry_script,
+                                                           config.time_column).evidence["items"], incomplete),
     }
     return {
         "families": sorted(f for f, r in checks.items() if r.status == "flagged"),
@@ -89,7 +95,9 @@ measure anything: decide from the files shown. Flaw families:
 A) preprocessing (scaling, imputation, feature selection, ...) fitted on rows that include the test set;
 B) features whose values would not be known at prediction time, or that are derived from the target;
 C) the same entities (e.g. patients) or later time periods in both train and test, when real use is on new
-   entities or future periods.
+   entities or future periods;
+D) the same rows on both sides (oversampling or duplicated joins before the split);
+E) models, settings or thresholds chosen by their score on the test rows.
 Verdict: confirmed (at least one flaw), not_found, or inconclusive. Also estimate the accuracy a correct
 evaluation would give. Answer only by calling the report_audit tool."""
 
@@ -108,7 +116,7 @@ def run_llm_only(config: AuditConfig, client: LLMClient) -> dict[str, Any]:
             "properties": {
                 "verdict": {"type": "string", "enum": ["confirmed", "not_found", "inconclusive"]},
                 "flaws": {"type": "array", "items": {"type": "object", "properties": {
-                    "family": {"type": "string", "enum": ["A", "B", "C"]}, "explanation": {"type": "string"}},
+                    "family": {"type": "string", "enum": ["A", "B", "C", "D", "E"]}, "explanation": {"type": "string"}},
                     "required": ["family", "explanation"]}},
                 "estimated_correct_accuracy": {"type": "number"},
             },
@@ -123,7 +131,7 @@ def run_llm_only(config: AuditConfig, client: LLMClient) -> dict[str, Any]:
         return {"error": "no report_audit call", "families": [], "text": response.text[:500],
                 "duration_s": round(time.perf_counter() - start, 1), "cost_usd": client.budget.cost_usd()}
     args = call.arguments
-    flaws = [f for f in args.get("flaws", []) if isinstance(f, dict) and f.get("family") in ("A", "B", "C")]
+    flaws = [f for f in args.get("flaws", []) if isinstance(f, dict) and f.get("family") in ("A", "B", "C", "D", "E")]
     verdict = args.get("verdict")
     return {
         "verdict": verdict,

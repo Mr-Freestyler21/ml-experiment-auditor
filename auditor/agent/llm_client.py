@@ -19,7 +19,8 @@ from typing import Any
 BASE_URL = "https://api.meta.ai/v1"
 DEFAULT_MODEL = "muse-spark-1.3"
 DEFAULT_MAX_TOKENS = 20_000
-MAX_OUTPUT_PER_REQUEST = 4_000
+# Reasoning counts as output: planning several patches can take well over 4,000 tokens.
+MAX_OUTPUT_PER_REQUEST = 16_000
 # Extra waits (seconds) after the SDK's own quick retries fail, to ride out network outages.
 OUTAGE_WAITS_S = (30, 60, 120)
 
@@ -81,6 +82,8 @@ class LLMResponse:
     # The raw output items (reasoning, message, function_call), so the caller can keep the
     # conversation history itself instead of relying on the server to remember it.
     output_items: list[dict[str, Any]] = field(default_factory=list)
+    # True when the reply was cut off by max_output_tokens (often before any tool call).
+    truncated: bool = False
 
     def history_items(self) -> list[dict[str, Any]]:
         """Items to append to the conversation history. Reasoning items are left out: they refer
@@ -167,8 +170,12 @@ class MetaLLMClient(LLMClient):
             if item.type == "function_call"
         ]
         items = [item.model_dump(exclude_none=True) for item in response.output]
+        details = getattr(response, "incomplete_details", None)
+        truncated = (getattr(response, "status", None) == "incomplete"
+                     and getattr(details, "reason", None) == "max_output_tokens")
         return LLMResponse(
-            id=response.id, text=response.output_text or "", tool_calls=calls, usage=usage, output_items=items
+            id=response.id, text=response.output_text or "", tool_calls=calls, usage=usage, output_items=items,
+            truncated=truncated,
         )
 
     def _create_with_patience(self, request: dict[str, Any]) -> Any:

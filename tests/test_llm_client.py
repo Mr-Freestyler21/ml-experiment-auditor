@@ -11,10 +11,10 @@ from auditor.agent.llm_client import (
 
 
 def test_budget_caps_output_and_stops_when_spent():
-    budget = TokenBudget(cap=5000)
-    assert budget.max_output_for_next_call() == 4000
+    budget = TokenBudget(cap=20000)
+    assert budget.max_output_for_next_call() == 16000
 
-    budget.record("muse-spark-1.3", {"input": 4000, "cached": 0, "output": 900, "reasoning": 0, "total": 4900}, 1.0, "x")
+    budget.record("muse-spark-1.3", {"input": 19000, "cached": 0, "output": 900, "reasoning": 0, "total": 19900}, 1.0, "x")
     assert budget.max_output_for_next_call() == 100
 
     budget.record("muse-spark-1.3", {"input": 100, "cached": 0, "output": 0, "reasoning": 0, "total": 100}, 1.0, "x")

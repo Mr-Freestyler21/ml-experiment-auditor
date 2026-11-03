@@ -108,9 +108,6 @@ accused one honest project.
 - Check B cannot see how a feature was computed. A 3-day average that secretly includes the next
   day was reported as `inconclusive` (correctly suspicious, not proven) in the benchmark.
 - The benchmark projects are synthetic. They test the method, not every real-world codebase.
-- Data note: with Meta Model API free credits, content sent to the model may be used by Meta for
-  product improvement. The auditor sends the script, column names, a few example values and the
-  `prediction_time` sentence. Only audit projects you are comfortable sharing.
 
 ## Setup
 

@@ -204,7 +204,7 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
     $("runmsg").textContent = ""; $("runmsg").className = "msg";
     post("/api/audit", JSON.stringify({ project: state.project, mode: mode }), { "Content-Type": "application/json" })
       .then(function (data) {
-        state.job = data.job; state.next = 0;
+        state.job = data.job; state.next = 0; state.inflight = false;
         $("timeline").textContent = "";
         $("result").classList.add("hidden");
         $("report").classList.add("hidden");
@@ -245,11 +245,18 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
   }
 
   function poll() {
-    fetch("/api/jobs/" + state.job + "?since=" + state.next).then(function (r) {
+    // One request at a time: when the computer is busy an answer can take longer than the poll
+    // interval, and overlapping requests for the same events would draw them twice.
+    if (state.inflight) return;
+    state.inflight = true;
+    var job_id = state.job, since = state.next;
+    fetch("/api/jobs/" + job_id + "?since=" + since).then(function (r) {
       if (r.status === 404) throw new Error("gone");
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     }).then(function (job) {
+      state.inflight = false;
+      if (job_id !== state.job || since !== state.next) return;  // a stale answer
       state.misses = 0;
       job.events.forEach(function (event) {
         if (event.type === "group") event.cards.forEach(addCard); else addCard(event);
@@ -257,6 +264,7 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
       state.next = job.next;
       if (job.status !== "running") finish(job);
     }).catch(function (err) {
+      state.inflight = false;
       // A missed update is retried; an audit the server does not know, or a server that stays
       // unreachable, will not come back, so stop instead of spinning forever.
       state.misses = (state.misses || 0) + 1;

@@ -202,6 +202,13 @@ def _entry_script(s: AuditSession) -> str:
 def _check_b(s: AuditSession, traced: TracedRun, proposed: list[Any], on_patches: list[str] | None = None
              ) -> CheckResult:
     features = next((list(sp.features) for sp in traced.splits if sp.features), None)
+    # A column asked about is measured even when the model got it as a plain array (no names) or
+    # through a transformer: shuffling it in the data file still shows whether the result depends on it.
+    asked = [str(i.get("column")) for i in proposed if isinstance(i, dict) and i.get("column") in s.data.columns
+             and i.get("column") != s.config.target]
+    extra = [c for c in dict.fromkeys(asked) if c not in (features or [])]
+    if extra:
+        features = (features or []) + extra
     suspects: list[Suspect] = []
     if features:
         power = feature_power(s.data, [f for f in features if f in s.data.columns], s.config.target)
@@ -235,9 +242,14 @@ def _patch_files(s: AuditSession, ids: list[Any]) -> tuple[dict[str, Path], list
         if patch is None:
             raise ToolArgumentError(f"unknown patch_id {pid!r}; accepted patches: {sorted(s.patches)}")
         patches.append(patch)
+    # A patch built on top of another already contains it: keep only the latest of a chain.
+    included = {pid for p in patches for pid in _chain(s, p)[1:]}
+    patches = [p for p in patches if p.id not in included]
+    ids = [p.id for p in patches]
     paths = [p.path for p in patches]
     if len(set(paths)) != len(paths):
-        raise ToolArgumentError("two patches change the same file; put all edits to one file in one patch")
+        raise ToolArgumentError("two separate patches change the same file; propose one that builds on the other "
+                                "(a new patch of a file is applied on top of its latest patch)")
     s.work_dir.mkdir(parents=True, exist_ok=True)
     overrides = {}
     for patch in patches:
@@ -249,6 +261,15 @@ def _patch_files(s: AuditSession, ids: list[Any]) -> tuple[dict[str, Path], list
     prepare = list(s.config.prepare_scripts) + sorted(
         p for p in paths if p != s.config.entry_script and p not in s.config.prepare_scripts)
     return overrides, prepare, "+".join(str(i) for i in ids)
+
+
+def _chain(s: AuditSession, patch: Any) -> list[str]:
+    """The patch id followed by the ids of the earlier patches it was built on."""
+    chain = [patch.id]
+    while patch.builds_on and patch.builds_on in s.patches:
+        patch = s.patches[patch.builds_on]
+        chain.append(patch.id)
+    return chain
 
 
 def _patched_rerun(s: AuditSession, ids: list[Any]):
@@ -387,16 +408,24 @@ def _propose_patch(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
         raise ToolArgumentError(f"no such file in the project: {path!r}")
     models = sorted({sp.model for sp in s.traced().splits})
     patch_id = f"P{len(s.patches) + 1}"
+    base = None if args.get("fresh") else next(
+        (p for p in reversed(list(s.patches.values())) if p.path == path), None)
     try:
-        patch = make_patch(patch_id, path, files[path], args.get("edits") or [], str(args.get("rationale", "")), models)
+        patch = make_patch(patch_id, path, files[path], args.get("edits") or [], str(args.get("rationale", "")),
+                           models, base=base)
     except PatchError as exc:
-        return {"accepted": False, "problems": exc.problems}
+        problems = exc.problems
+        if base is not None:
+            problems = problems + [f"edits are applied on top of {base.id} (the latest accepted patch of {path}); "
+                                   "copy 'old' from that patched text, or pass fresh: true to start from the original"]
+        return {"accepted": False, "problems": problems}
     s.patches[patch_id] = patch
     s.work_dir.mkdir(parents=True, exist_ok=True)
     (s.work_dir / f"patch_{patch_id}.diff").write_text(patch.diff, encoding="utf-8")
     return {
         "accepted": True,
         "patch_id": patch_id,
+        "includes": _chain(s, patch),
         "lines_changed": patch.lines_changed,
         "protected_model_calls": models,
         "diff": patch.diff,
@@ -406,7 +435,8 @@ def _propose_patch(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
 def _run_patched(s: AuditSession, args: dict[str, Any]) -> dict[str, Any]:
     ids = args.get("patch_ids") or ([args["patch_id"]] if args.get("patch_id") else [])
     overrides, prepare, label = _patch_files(s, ids)
-    patches = [s.patches[str(i)] for i in ids]
+    ids = label.split("+")
+    patches = [s.patches[i] for i in ids]
     traced = run_traced(s.config, s.sandbox, file_overrides=overrides, prepare_scripts=prepare)
     if traced.error:
         return {"patch_ids": ids, "error": f"patched run failed: {traced.error}",
@@ -552,7 +582,8 @@ TOOL_SCHEMAS = [
         "before training, so the fix reaches the data. One patch per file. Give exact text replacements: each "
         "'old' must be copied exactly from read_file output WITHOUT the line-number prefix and must occur once. "
         "Code applies them to a copy, checks the result compiles and leaves the model untouched, and returns the "
-        "unified diff and a patch_id.",
+        "unified diff and a patch_id. A new patch of a file is applied ON TOP of that file's latest accepted "
+        "patch (it includes it), so you can fix a file step by step; pass fresh: true to start from the original.",
         {
             "path": {"type": "string", "description": "File to patch; default is the entry script."},
             "edits": {
@@ -561,6 +592,7 @@ TOOL_SCHEMAS = [
                           "required": ["old", "new"]},
             },
             "rationale": {"type": "string"},
+            "fresh": {"type": "boolean", "description": "Start from the original file instead of its latest patch."},
         },
         ["edits", "rationale"],
     ),

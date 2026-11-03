@@ -23,9 +23,9 @@ from auditor.agent.llm_client import BudgetExceeded, LLMClient
 from auditor.agent.tools import TOOL_SCHEMAS, AuditSession, to_json_text
 
 DEFAULT_MAX_STEPS = 30
-# File contents are only needed for a few turns (to reason and copy patch text); after that
-# they are replaced by a short note in the history, which saves most of the input tokens.
-BULKY_TOOLS = ("read_file", "list_files")
+# File contents and check details are only needed for a few turns (to reason and copy patch
+# text); after that they are replaced by a short version in the history, which saves most of
+# the input tokens. The full results stay in the evidence.
 KEEP_BULKY_STEPS = 3
 
 
@@ -65,7 +65,7 @@ def run_agent(
     history: list[dict[str, Any]] = [{"role": "user", "content": prompts.task_message(session.config)}]
     stopped_because = "max_steps"
     steps = 0
-    bulky: list[tuple[int, int, str]] = []  # (history index, step, tool) of outputs to trim later
+    bulky: list[tuple[int, int, str]] = []  # (history index, step, short output) to swap in later
     try:
         while steps < max_steps:
             steps += 1
@@ -103,8 +103,9 @@ def run_agent(
                 result = session.call(call.name, call.arguments if call.error is None else None)
                 log("tool", {"step": steps, "name": call.name, "result": result})
                 history.append({"type": "function_call_output", "call_id": call.call_id, "output": to_json_text(result)})
-                if call.name in BULKY_TOOLS:
-                    bulky.append((len(history) - 1, steps, f"{call.name} ({result.get('evidence_id')})"))
+                short = _short_output(call.name, result)
+                if short is not None:
+                    bulky.append((len(history) - 1, steps, short))
             bulky = _trim_old_outputs(history, bulky, steps)
             if session.final is not None:
                 stopped_because = "finalized"
@@ -141,13 +142,26 @@ def run_agent(
     return result
 
 
+def _short_output(tool: str, result: dict[str, Any]) -> str | None:
+    """What an old tool output is shortened to, or None to keep it whole."""
+    eid = result.get("evidence_id")
+    if tool in ("read_file", "list_files"):
+        return json.dumps({"evidence_id": eid, "note": f"{tool} output removed to save space; call it again "
+                                                      "if you need the text"})
+    if tool == "run_check" and "evidence" in result:
+        return json.dumps({k: result[k] for k in ("evidence_id", "status", "summary", "measurements") if k in result}
+                          | {"note": "details trimmed to save space; they remain in the evidence"}, default=str)
+    if tool == "propose_patch" and "diff" in result:
+        return json.dumps({k: v for k, v in result.items() if k != "diff"}, default=str)
+    return None
+
+
 def _trim_old_outputs(history: list[dict[str, Any]], bulky: list[tuple[int, int, str]], step: int) -> list[tuple[int, int, str]]:
-    """Replace file contents older than KEEP_BULKY_STEPS steps with a note; return the ones kept."""
+    """Swap outputs older than KEEP_BULKY_STEPS steps for their short version; return the ones kept."""
     kept = []
-    for index, made_at, tool in bulky:
+    for index, made_at, short in bulky:
         if step - made_at >= KEEP_BULKY_STEPS:
-            history[index] = {**history[index], "output": json.dumps(
-                {"note": f"{tool} output removed to save space; call it again if you need the text"})}
+            history[index] = {**history[index], "output": short}
         else:
-            kept.append((index, made_at, tool))
+            kept.append((index, made_at, short))
     return kept

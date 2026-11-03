@@ -340,15 +340,28 @@ def test_check_b_uses_code_evidence_and_can_measure_on_top_of_patches(pipeline_s
     assert "P1" in on_fixed["evidence"]["measured_under"]
 
 
-def test_run_patched_rejects_two_patches_to_one_file(pipeline_session):
+def test_run_patched_rejects_two_separate_patches_of_one_file(pipeline_session):
     s = pipeline_session
     s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": CENTRED, "new": TRAILING}], "rationale": "a"})
     s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": "min_periods=1", "new": "min_periods=2"}],
-                             "rationale": "b"})
+                             "rationale": "b", "fresh": True})
 
     result = s.call("run_patched", {"patch_ids": ["P1", "P2"]})
 
     assert "same file" in result["error"]
+
+
+def test_a_second_patch_of_a_file_builds_on_the_first(pipeline_session):
+    s = pipeline_session
+    s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": CENTRED, "new": TRAILING}], "rationale": "a"})
+    second = s.call("propose_patch", {"path": "prepare.py", "rationale": "b",
+                                      "edits": [{"old": "shift(1).rolling(3", "new": "shift(1).rolling(4"}]})
+
+    result = s.call("run_patched", {"patch_ids": ["P1", "P2"]})
+
+    assert second["accepted"] is True and second["includes"] == ["P2", "P1"]
+    assert result["patch_ids"] == ["P2"]
+    assert result["data_rebuilt"] is True
 
 
 def test_a_reply_cut_off_before_any_tool_call_gets_a_smaller_step_nudge(session, tmp_path):

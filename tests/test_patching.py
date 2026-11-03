@@ -43,12 +43,36 @@ def test_valid_patch_produces_a_diff_and_leaves_the_file_alone(source):
 
 def test_old_text_must_occur_exactly_once(source):
     with pytest.raises(PatchError) as missing:
-        patch(source, [{"old": "   4  " + SPLIT_LINE, "new": GROUPED}])
+        patch(source, [{"old": SPLIT_LINE.replace("0.2", "0.3"), "new": GROUPED}])
     with pytest.raises(PatchError) as ambiguous:
         patch(source, [{"old": "random_state=42", "new": "random_state=0"}])
 
-    assert "found 0" in missing.value.problems[0] and "line-number prefix" in missing.value.problems[0]
+    assert "found 0" in missing.value.problems[0] and "closest line in the file is line 4" in missing.value.problems[0]
     assert "found 2" in ambiguous.value.problems[0]
+
+
+def test_copied_line_numbers_and_other_indentation_are_forgiven(tmp_path):
+    path = tmp_path / "train.py"
+    path.write_text("import os\nif True:\n    a = 1\n    b = 2\nprint(os.environ['AUDIT_OUTPUT_DIR'])\n",
+                    encoding="utf-8")
+
+    numbered = make_patch("P1", "train.py", path, [{"old": "   3      a = 1", "new": "a = 10"}], "x", ())
+    unindented = make_patch("P2", "train.py", path, [{"old": "a = 1\nb = 2", "new": "a = 1\nb = 3\nc = 4"}], "x", ())
+
+    assert "    a = 10\n" in numbered.patched
+    assert "    a = 1\n    b = 3\n    c = 4\n" in unindented.patched
+
+
+def test_a_patch_can_build_on_an_earlier_one(source):
+    first = patch(source, [{"old": SPLIT_LINE, "new": GROUPED}])
+    second = make_patch("P2", "train.py", source, [{"old": "test_size=0.2, random_state=42).split",
+                                                    "new": "test_size=0.25, random_state=42).split"}],
+                        "bigger test set", ("RandomForestClassifier",), base=first)
+
+    assert second.builds_on == "P1"
+    assert "GroupShuffleSplit(n_splits=1, test_size=0.25" in second.patched
+    assert second.diff.startswith("--- a/train.py")  # still a diff against the original file
+    assert "-" + SPLIT_LINE in second.diff
 
 
 def test_changing_the_model_is_rejected(source):

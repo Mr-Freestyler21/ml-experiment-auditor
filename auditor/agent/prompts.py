@@ -25,11 +25,12 @@ How to work:
 4. Measure effects: run_with_split re-evaluates with a corrected split on the unchanged script.
    Mind confounds: a temporal split can change the label distribution, so compare target rates and
    majority-class baselines.
-5. Fix every confirmed flaw you can, with one patch per file: in the training script (split, resampling
+5. Fix every confirmed flaw you can: in the training script (split, resampling
    after the split, preprocessing fitted on training rows, dropping leaking features) and in the data
    preparation script (past-only windows, statistics from earlier rows only). Keep the model and its
    settings unchanged. Copy each 'old' text exactly from read_file, without line numbers; if a patch
-   is rejected, read the problems and retry. Then run_patched with ALL accepted patch ids together,
+   is rejected, read the problems and retry. A new patch of a file builds on that file's latest patch, so
+   you can fix a file in small steps. Then run_patched with the latest patch id of each file together,
    and check that the flagged checks are now clear.
 6. Call finalize with a structured review:
    - findings: confirmed flaws, most severe first, each with severity (critical = changes the

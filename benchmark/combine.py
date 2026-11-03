@@ -25,6 +25,13 @@ HISTORY = [
     "legitimate reading is not one), a timed-out traced run is now retried once, and the held-out set was "
     "then run once more on the final version. The table shows the final version; the earlier held-out "
     "run is reported here, not hidden.",
+    "In dev_v4, dev_b_innocuous lost every check to one traced run that timed out on a busy machine (Muse "
+    "still named the leak, as a suspicion). After the retry fix it was rerun alone (dev_v5_rerun); the table "
+    "uses that run. Rules only and Muse only are unchanged since dev_v2 and heldout_v2 and come from those runs.",
+    "Repeats show the remaining weakness: on dev_clean_strong_feature (a strong, legitimate feature placed as "
+    "bait) three audits gave inconclusive, not found, and once a wrong confirmed B. Version 1 gave inconclusive "
+    "three times. Deciding whether a strong feature is known at prediction time, without code that shows how it "
+    "was built, is judgement, and the judgement still varies.",
     "Version 1 history:",
     "Dev run 1 exposed: pandas-only preprocessing invisible to the tracer (check A now also reads the "
     "script); no patch proposed for leaky features (prompt: the fix is removing the feature); runs lost "

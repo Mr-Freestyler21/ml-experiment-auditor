@@ -94,23 +94,30 @@ Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
 A benchmark of 20 generated projects (five themes, flaws labelled by type in the Kapoor &
 Narayanan taxonomy, plus clean controls), comparing three systems. Six projects are held out:
 their answer keys were committed with a fingerprint ([HELDOUT_LOCK.txt](benchmark/HELDOUT_LOCK.txt))
-before any audit ran on them, and they were run once. Full table: [benchmark/RESULTS.md](benchmark/RESULTS.md).
+before any audit ran on them. Full table, and every change made while developing against the
+development set: [benchmark/RESULTS.md](benchmark/RESULTS.md).
 
 | | Rules only | **Muse + tools (this auditor)** | Muse only (no tools) |
 |---|---|---|---|
-| Exact answers | 19/20 | **19/20** | 18/20 |
-| False alarms on 7 clean projects | 0 | **0** | 1 |
+| Exact answers | 19/20 | **20/20** | 20/20 |
+| False alarms on 7 clean projects | 0 | **0** | 0 |
 | Fixes that reached the correct score | n/a | **13/13** | n/a |
-| Mean error of the corrected score | n/a | **0.0009** | 0.068 (estimated) |
-| Held-out set, exact answers | 6/6 | **6/6** | 5/6 |
-| Same verdict in 3 repeated audits (4 projects) | n/a | **12/12** | n/a |
-| Cost per audit | free | $0.035 | $0.011 |
+| Mean error of the corrected score | n/a | **0.0009** | 0.055 (estimated) |
+| Held-out set, exact answers | 6/6 | **6/6** | 6/6 |
+| Same verdict in 3 repeated audits (4 projects) | n/a | **3 of 4** | n/a |
+| Cost per audit | free | $0.074 | $0.011 |
 
-What this shows, plainly: on these projects, fixed rules detect flaws as well as the auditor.
-What only the auditor does is measure the truth: it writes the fix, reruns it and reports the
-corrected score (off by 0.0009 on average), with every claim tied to evidence. Muse without
-tools spots most flaws, but its estimates of the real score are off by about 7 points and it
-accused one honest project.
+What this shows, plainly: these projects each hide one flaw, and on them all three systems
+detect about equally well. What only the auditor does is measure the truth: it writes the fix,
+reruns it and reports the corrected score (off by 0.0009 on average, against 0.055 for Muse's
+own estimates without tools), with every claim tied to evidence. The repeats show its weak
+spot: on a project baited with a strong but legitimate feature, three audits answered
+inconclusive, not found, and once a wrong "confirmed".
+
+The benchmark is the auditor's second version, which reviews every script and checks for
+duplicated rows (D) and choices made on the test rows (E). Its first full run had two false
+alarms; check B was recalibrated on the development set, and the held-out set was run once
+more. That earlier run is reported in RESULTS.md, not hidden.
 
 ## Limitations
 

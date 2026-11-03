@@ -93,6 +93,10 @@ class AuditSession:
     def traced(self) -> TracedRun:
         if self._traced is None:
             self._traced = run_traced(self.config, self.sandbox)
+            if self._traced.run.timed_out:
+                # Every check reads this one run, so a single slow moment (a busy machine) would
+                # leave all of them unanswered for the whole audit: try once more.
+                self._traced = run_traced(self.config, self.sandbox)
         return self._traced
 
     def incomplete_reason(self) -> str | None:

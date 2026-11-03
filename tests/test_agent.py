@@ -385,3 +385,21 @@ def test_the_model_is_told_to_finalize_before_the_step_cap(session, tmp_path):
 
     sent = json.dumps(client.requests[-1]["input"])
     assert prompts.FINALIZE_NOW in sent
+
+
+def test_a_traced_run_that_times_out_is_tried_once_more(session, monkeypatch):
+    import auditor.agent.tools as tools
+
+    real, calls = tools.run_traced, []
+
+    def flaky(config, sandbox, **kwargs):
+        calls.append(1)
+        result = real(config, sandbox, **kwargs)
+        if len(calls) == 1:
+            return result.__class__(run=result.run.__class__(**{**result.run.__dict__, "timed_out": True}),
+                                    events=[], splits=[], metrics=None, error="run timed out")
+        return result
+
+    monkeypatch.setattr(tools, "run_traced", flaky)
+
+    assert session.traced().error is None and len(calls) == 2

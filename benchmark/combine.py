@@ -15,8 +15,17 @@ from typing import Any
 from benchmark.run import RESULTS, ROOT, load_answers, write_summary
 
 HISTORY = [
-    "How the auditor was developed against this benchmark (all on the development set; the held-out "
-    "set was run once, at commit 96ab701, after the last change):",
+    "How the auditor was developed against this benchmark. Version 1 (checks A to C) was tuned on the "
+    "development set only and run once on the held-out set at commit 96ab701, scoring 6/6. Version 2 "
+    "added the deep review (code review of every script, checks D and E, whole-pipeline fixes, "
+    "structured reports), developed on a separate pump-failure project. Its first full run (dev_v2, "
+    "heldout_v2) had false alarms on two clean projects (one development, one held-out): Muse confirmed "
+    "strong legitimate features as leaks on hedged reasons. Check B confirmations were recalibrated on "
+    "the development set only (dev_v3, dev_v4: hedged reasons become suspicions; a strong feature with a "
+    "legitimate reading is not one), a timed-out traced run is now retried once, and the held-out set was "
+    "then run once more on the final version. The table shows the final version; the earlier held-out "
+    "run is reported here, not hidden.",
+    "Version 1 history:",
     "Dev run 1 exposed: pandas-only preprocessing invisible to the tracer (check A now also reads the "
     "script); no patch proposed for leaky features (prompt: the fix is removing the feature); runs lost "
     "to network drops (longer retries); prediction_time wording that contradicted the data (reworded; "

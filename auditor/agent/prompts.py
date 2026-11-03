@@ -55,8 +55,12 @@ Rules:
   the same. Confirm a B finding only when the code shows the column is built from later rows or from
   the label (the code review, or code you read), or when its meaning, read against the prediction time,
   cannot be known then and has no plausible legitimate reading. If your reason needs "may", "might",
-  "could" or "if", the column only might leak: put it in suspected, not in findings. A project whose
-  only concern is such a column is inconclusive.
+  "could" or "if", the column only might leak: put it in suspected, not in findings.
+- Strength alone is not suspicious, and neither is not seeing how a column was built (that is true of
+  most data). A column whose name has a legitimate reading at the prediction time, with nothing in the
+  code or data pointing the other way, is a normal feature: do not list it. Suspect a column only for a
+  concrete reason: a name or description implying later information, a code review item, or a value
+  pattern that tracks the label.
 - "inconclusive" is a good answer when the evidence is insufficient.
 - "not_found" claims there is no flaw: it needs checks A to E run and nothing suspected.
 - Report accuracy next to the majority-class baseline and an imbalance-aware metric when available.

@@ -70,6 +70,8 @@ def run_agent(
     stopped_because = "max_steps"
     steps = 0
     bulky: list[tuple[int, int, str]] = []  # (history index, step, short output) to swap in later
+    # The latest read of each file stays whole, so patches are copied from the real text, not memory.
+    latest_read: dict[str, int] = {}
     warned: set[str] = set()
     try:
         while steps < max_steps:
@@ -111,7 +113,9 @@ def run_agent(
                 short = _short_output(call.name, result)
                 if short is not None:
                     bulky.append((len(history) - 1, steps, short))
-            bulky = _trim_old_outputs(history, bulky, steps)
+                if call.name == "read_file" and not result.get("error") and isinstance(call.arguments, dict):
+                    latest_read[str(call.arguments.get("path"))] = len(history) - 1
+            bulky = _trim_old_outputs(history, bulky, steps, keep=set(latest_read.values()))
             if session.final is not None:
                 stopped_because = "finalized"
                 break
@@ -165,11 +169,13 @@ def _short_output(tool: str, result: dict[str, Any]) -> str | None:
     return None
 
 
-def _trim_old_outputs(history: list[dict[str, Any]], bulky: list[tuple[int, int, str]], step: int) -> list[tuple[int, int, str]]:
-    """Swap outputs older than KEEP_BULKY_STEPS steps for their short version; return the ones kept."""
+def _trim_old_outputs(history: list[dict[str, Any]], bulky: list[tuple[int, int, str]], step: int,
+                      keep: set[int] = frozenset()) -> list[tuple[int, int, str]]:
+    """Swap outputs older than KEEP_BULKY_STEPS steps for their short version, except the history
+    indexes in `keep`; return the ones still waiting."""
     kept = []
     for index, made_at, short in bulky:
-        if step - made_at >= KEEP_BULKY_STEPS:
+        if step - made_at >= KEEP_BULKY_STEPS and index not in keep:
             history[index] = {**history[index], "output": short}
         else:
             kept.append((index, made_at, short))

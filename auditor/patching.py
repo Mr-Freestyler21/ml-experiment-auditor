@@ -162,7 +162,8 @@ def _closest_hint(text: str, old: str) -> str:
     lines = [line.strip() for line in text.splitlines()]
     match = difflib.get_close_matches(first, lines, n=1, cutoff=0.6)
     if not match:
-        return " (copy it from read_file without the line-number prefix)"
+        return ("; nothing like it is in the file. Call read_file again and copy the exact lines (without the "
+                "line-number prefix) instead of writing them from memory")
     number = lines.index(match[0]) + 1
     return f"; the closest line in the file is line {number}: {match[0]!r}"
 

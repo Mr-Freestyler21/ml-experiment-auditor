@@ -40,3 +40,13 @@ def test_budget_warnings_come_once_each_and_finalize_wins():
     assert budget_warning(760, 1000, 2, warned) == prompts.FINALIZE_NOW
     assert budget_warning(900, 1000, 1, warned) is None
     assert budget_warning(900, 1000, 1, set()) == prompts.FINALIZE_NOW
+
+
+def test_the_latest_read_of_a_file_is_kept_whole():
+    history = [{"type": "function_call_output", "call_id": c, "output": "text " + c} for c in "abc"]
+    bulky = [(0, 1, "short a"), (1, 1, "short b"), (2, 1, "short c")]
+
+    kept = _trim_old_outputs(history, bulky, step=1 + KEEP_BULKY_STEPS, keep={1})
+
+    assert [h["output"] for h in history] == ["short a", "text b", "short c"]
+    assert kept == [(1, 1, "short b")]

@@ -222,7 +222,7 @@ def test_full_scripted_audit_writes_the_report(session, project, tmp_path):
 def test_the_loop_keeps_the_full_history_with_matching_call_ids(session, tmp_path):
     client = ScriptedLLMClient([turn(1, ("list_files", {}), ("read_file", {"path": "train.py"})), turn(2)])
 
-    run_agent(session, client, tmp_path / "audit", max_steps=2)
+    run_agent(session, client, tmp_path / "audit", max_steps=10)
 
     second = client.requests[1]
     assert "previous_response_id" not in second  # no reliance on server-side memory
@@ -374,3 +374,14 @@ def test_a_reply_cut_off_before_any_tool_call_gets_a_smaller_step_nudge(session,
     run_agent(session, client, tmp_path / "audit", max_steps=2)
 
     assert prompts.TRUNCATED in json.dumps(client.requests[1]["input"])
+
+
+def test_the_model_is_told_to_finalize_before_the_step_cap(session, tmp_path):
+    from auditor.agent import prompts
+
+    client = ScriptedLLMClient([turn(i, ("list_files", {})) for i in range(1, 6)])
+
+    run_agent(session, client, tmp_path / "audit", max_steps=5)
+
+    sent = json.dumps(client.requests[-1]["input"])
+    assert prompts.FINALIZE_NOW in sent

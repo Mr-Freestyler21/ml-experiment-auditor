@@ -27,3 +27,16 @@ def test_short_versions_keep_ids_verdict_and_summary():
     assert "evidence" not in check
     assert patch == {"evidence_id": "E7", "accepted": True, "patch_id": "P1"}
     assert _short_output("run_patched", {"metrics": {}}) is None
+
+
+def test_budget_warnings_come_once_each_and_finalize_wins():
+    from auditor.agent import prompts
+    from auditor.agent.loop import budget_warning
+
+    warned: set[str] = set()
+    assert budget_warning(100, 1000, 20, warned) is None
+    assert budget_warning(700, 1000, 20, warned) == prompts.WRAP_UP
+    assert budget_warning(750, 1000, 19, warned) is None
+    assert budget_warning(760, 1000, 2, warned) == prompts.FINALIZE_NOW
+    assert budget_warning(900, 1000, 1, warned) is None
+    assert budget_warning(900, 1000, 1, set()) == prompts.FINALIZE_NOW

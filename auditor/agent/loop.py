@@ -27,6 +27,10 @@ DEFAULT_MAX_STEPS = 30
 # text); after that they are replaced by a short version in the history, which saves most of
 # the input tokens. The full results stay in the evidence.
 KEEP_BULKY_STEPS = 3
+# Budget warnings, so an audit ends with a verdict instead of running out mid-investigation:
+# (share of the token cap used, steps left) at which each warning is sent, once.
+WRAP_UP_AT = (0.65, 6)
+FINALIZE_AT = (0.85, 2)
 
 
 @dataclass
@@ -66,6 +70,7 @@ def run_agent(
     stopped_because = "max_steps"
     steps = 0
     bulky: list[tuple[int, int, str]] = []  # (history index, step, short output) to swap in later
+    warned: set[str] = set()
     try:
         while steps < max_steps:
             steps += 1
@@ -110,6 +115,10 @@ def run_agent(
             if session.final is not None:
                 stopped_because = "finalized"
                 break
+            warning = budget_warning(client.budget.used, client.budget.cap, max_steps - steps, warned)
+            if warning:
+                history.append({"role": "user", "content": warning})
+                log("budget_warning", {"step": steps, "text": warning})
     finally:
         transcript.close()
 
@@ -165,3 +174,15 @@ def _trim_old_outputs(history: list[dict[str, Any]], bulky: list[tuple[int, int,
         else:
             kept.append((index, made_at, short))
     return kept
+
+
+def budget_warning(used: int, cap: int, steps_left: int, warned: set[str]) -> str | None:
+    """A message telling the model to wrap up (or finalize now) as the budget runs low, once each."""
+    share = used / cap if cap else 0.0
+    if "finalize" not in warned and (share >= FINALIZE_AT[0] or steps_left <= FINALIZE_AT[1]):
+        warned.update({"finalize", "wrap_up"})
+        return prompts.FINALIZE_NOW
+    if "wrap_up" not in warned and (share >= WRAP_UP_AT[0] or steps_left <= WRAP_UP_AT[1]):
+        warned.add("wrap_up")
+        return prompts.WRAP_UP
+    return None

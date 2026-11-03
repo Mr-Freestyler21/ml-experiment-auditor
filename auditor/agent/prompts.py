@@ -25,7 +25,8 @@ How to work:
 4. Measure effects: run_with_split re-evaluates with a corrected split on the unchanged script.
    Mind confounds: a temporal split can change the label distribution, so compare target rates and
    majority-class baselines.
-5. Fix every confirmed flaw you can: in the training script (split, resampling
+5. Fix the confirmed flaws, largest effect first (the split, resampling before it, leaking features), with
+   small targeted edits of a few lines each; never rewrite a script. Fixes go in the training script (split, resampling
    after the split, preprocessing fitted on training rows, dropping leaking features) and in the data
    preparation script (past-only windows, statistics from earlier rows only). Keep the model and its
    settings unchanged. Copy each 'old' text exactly from read_file, without line numbers; if a patch
@@ -76,3 +77,9 @@ def task_message(config: AuditConfig) -> str:
 NUDGE = "Continue the audit by calling a tool. When you are done, call finalize."
 TRUNCATED = ("Your reply ran out of room before you called a tool. Act now with one smaller step: for example "
              "one propose_patch call for one file, then the next file in a later step.")
+WRAP_UP = ("Budget: most of this audit's token or step budget is used. Stop new investigations. If you have accepted "
+           "patches, run_patched with the latest one per file (unless you already have that result), then call "
+           "finalize. Flaws you confirmed but could not fix stay as findings; say in score_assessment that the "
+           "corrected score is an upper bound while they remain.")
+FINALIZE_NOW = ("Budget almost spent: call finalize now with what you have measured. Unfinished work goes in "
+                "suspected and score_assessment.")

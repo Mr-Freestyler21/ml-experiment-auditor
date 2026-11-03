@@ -14,39 +14,39 @@
         "corrected": "n/a",
         "mean_abs_error_of_corrected_metric": null,
         "failures": 0,
-        "median_duration_s": 9.3,
+        "median_duration_s": 9.9,
         "mean_cost_usd": 0
       },
       "agent": {
         "projects": 20,
         "recall": {
           "A": "5/5",
-          "B": "3/4",
+          "B": "4/4",
           "C": "4/4"
         },
-        "precision": "12/12",
+        "precision": "13/13",
         "clean_false_alarms": "0/7",
-        "exact_match": "19/20",
+        "exact_match": "20/20",
         "corrected": "13/13",
         "mean_abs_error_of_corrected_metric": 0.0009,
         "failures": 0,
-        "median_duration_s": 68.9,
-        "mean_cost_usd": 0.0346
+        "median_duration_s": 181.3,
+        "mean_cost_usd": 0.0736
       },
       "llm_only": {
         "projects": 20,
         "recall": {
           "A": "5/5",
           "B": "4/4",
-          "C": "3/4"
+          "C": "4/4"
         },
-        "precision": "12/13",
-        "clean_false_alarms": "1/7",
-        "exact_match": "18/20",
+        "precision": "13/13",
+        "clean_false_alarms": "0/7",
+        "exact_match": "20/20",
         "corrected": "n/a",
-        "mean_abs_error_of_corrected_metric": 0.0678,
-        "failures": 1,
-        "median_duration_s": 13.4,
+        "mean_abs_error_of_corrected_metric": 0.0549,
+        "failures": 0,
+        "median_duration_s": 19.8,
         "mean_cost_usd": 0.0106
       }
     },
@@ -64,24 +64,24 @@
         "corrected": "n/a",
         "mean_abs_error_of_corrected_metric": null,
         "failures": 0,
-        "median_duration_s": 8.8,
+        "median_duration_s": 9.9,
         "mean_cost_usd": 0
       },
       "agent": {
         "projects": 14,
         "recall": {
           "A": "4/4",
-          "B": "2/3",
+          "B": "3/3",
           "C": "2/2"
         },
-        "precision": "8/8",
+        "precision": "9/9",
         "clean_false_alarms": "0/5",
-        "exact_match": "13/14",
+        "exact_match": "14/14",
         "corrected": "9/9",
         "mean_abs_error_of_corrected_metric": 0.0013,
         "failures": 0,
-        "median_duration_s": 67.2,
-        "mean_cost_usd": 0.033
+        "median_duration_s": 193.6,
+        "mean_cost_usd": 0.0797
       },
       "llm_only": {
         "projects": 14,
@@ -90,14 +90,14 @@
           "B": "3/3",
           "C": "2/2"
         },
-        "precision": "9/10",
-        "clean_false_alarms": "1/5",
-        "exact_match": "13/14",
+        "precision": "9/9",
+        "clean_false_alarms": "0/5",
+        "exact_match": "14/14",
         "corrected": "n/a",
-        "mean_abs_error_of_corrected_metric": 0.0709,
+        "mean_abs_error_of_corrected_metric": 0.0509,
         "failures": 0,
-        "median_duration_s": 14.4,
-        "mean_cost_usd": 0.0104
+        "median_duration_s": 19.8,
+        "mean_cost_usd": 0.0107
       }
     },
     "Held-out set": {
@@ -114,7 +114,7 @@
         "corrected": "n/a",
         "mean_abs_error_of_corrected_metric": null,
         "failures": 0,
-        "median_duration_s": 17.0,
+        "median_duration_s": 8.8,
         "mean_cost_usd": 0
       },
       "agent": {
@@ -130,24 +130,24 @@
         "corrected": "4/4",
         "mean_abs_error_of_corrected_metric": 0.0,
         "failures": 0,
-        "median_duration_s": 81.0,
-        "mean_cost_usd": 0.0383
+        "median_duration_s": 147.7,
+        "mean_cost_usd": 0.0593
       },
       "llm_only": {
         "projects": 6,
         "recall": {
           "A": "1/1",
           "B": "1/1",
-          "C": "1/2"
+          "C": "2/2"
         },
-        "precision": "3/3",
+        "precision": "4/4",
         "clean_false_alarms": "0/2",
-        "exact_match": "5/6",
+        "exact_match": "6/6",
         "corrected": "n/a",
-        "mean_abs_error_of_corrected_metric": 0.0585,
-        "failures": 1,
-        "median_duration_s": 8.9,
-        "mean_cost_usd": 0.0111
+        "mean_abs_error_of_corrected_metric": 0.0639,
+        "failures": 0,
+        "median_duration_s": 20.3,
+        "mean_cost_usd": 0.0102
       }
     }
   },
@@ -194,7 +194,7 @@
       "agent": "confirmed A",
       "patched": "0.7530",
       "llm_only": "confirmed A",
-      "estimate": "0.7300"
+      "estimate": "0.7400"
     },
     {
       "id": "dev_b_future_window",
@@ -202,10 +202,10 @@
       "truth": "B (L3.1)",
       "correct": 0.74,
       "rules": "-",
-      "agent": "inconclusive -",
+      "agent": "confirmed B",
       "patched": "0.7517",
       "llm_only": "confirmed B",
-      "estimate": "0.6000"
+      "estimate": "0.6200"
     },
     {
       "id": "dev_b_innocuous",
@@ -216,7 +216,7 @@
       "agent": "confirmed B",
       "patched": "0.7250",
       "llm_only": "confirmed B",
-      "estimate": "0.6000"
+      "estimate": "0.6500"
     },
     {
       "id": "dev_b_obvious",
@@ -227,7 +227,7 @@
       "agent": "confirmed B",
       "patched": "0.7864",
       "llm_only": "confirmed B",
-      "estimate": "0.7300"
+      "estimate": "0.7800"
     },
     {
       "id": "dev_c_groups",
@@ -238,7 +238,7 @@
       "agent": "confirmed C",
       "patched": "0.6813",
       "llm_only": "confirmed C",
-      "estimate": "0.5000"
+      "estimate": "0.5500"
     },
     {
       "id": "dev_c_time",
@@ -270,7 +270,7 @@
       "rules": "-",
       "agent": "not_found -",
       "patched": "",
-      "llm_only": "confirmed A",
+      "llm_only": "not_found -",
       "estimate": "0.8000"
     },
     {
@@ -326,7 +326,7 @@
       "agent": "confirmed B",
       "patched": "0.7333",
       "llm_only": "confirmed B",
-      "estimate": "0.7500"
+      "estimate": "0.7800"
     },
     {
       "id": "ho_c_groups",
@@ -347,8 +347,8 @@
       "rules": "C",
       "agent": "confirmed C",
       "patched": "0.7300",
-      "llm_only": "error",
-      "estimate": ""
+      "llm_only": "confirmed C",
+      "estimate": "0.6800"
     },
     {
       "id": "ho_clean_cv",
@@ -356,7 +356,7 @@
       "truth": "clean",
       "correct": 0.6672222222222223,
       "rules": "-",
-      "agent": "inconclusive -",
+      "agent": "not_found -",
       "patched": "",
       "llm_only": "not_found -",
       "estimate": "0.6700"
@@ -396,10 +396,10 @@
       "runs": 3,
       "outcomes": [
         "inconclusive -",
-        "inconclusive -",
-        "inconclusive -"
+        "not_found -",
+        "confirmed B"
       ],
-      "agree": true
+      "agree": false
     },
     "ho_c_time": {
       "runs": 3,

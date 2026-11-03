@@ -105,3 +105,17 @@ def test_code_evidence_maps_future_features_to_columns(tmp_path):
     code = code_evidence_by_column(result.evidence["items"])
     assert "vib_7d" in code and code["vib_7d"]["line"] == 5
     assert "z" not in code  # a family A statistic is not future information
+
+
+def test_virtual_environments_and_tooling_folders_are_not_reviewed(tmp_path):
+    project(tmp_path, train=TRAIN)
+    for folder in ("venv/Lib/site-packages/lib", "myenv/Lib", "node_modules/x", ".git/hooks"):
+        (tmp_path / folder).mkdir(parents=True)
+        (tmp_path / folder / "leaky.py").write_text(PREPARE, encoding="utf-8")
+    (tmp_path / "myenv" / "pyvenv.cfg").write_text("home = x", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "prepare.py").write_text(PREPARE, encoding="utf-8")
+
+    result = review_project(tmp_path, "train.py", time_column="date")
+
+    assert result.evidence["files"] == ["train.py", "src/prepare.py"]

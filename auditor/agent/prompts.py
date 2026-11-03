@@ -51,9 +51,12 @@ Rules:
   Code review items alone go in suspected, unless a check of their family is flagged.
 - A flagged check A, C, D or E describes a flaw in procedure. Confirm it even when the fix barely
   changes the score, and report the measured effect.
-- A flagged check B shows the result depends on a suspected column. Confirm it when the column clearly
-  would not be known at prediction time (or the code review shows it is built from later rows). If it
-  only might not be known, put it in suspected. A strong feature that is legitimately known is not a leak.
+- A flagged check B shows only that the result depends on a column; a strong legitimate feature does
+  the same. Confirm a B finding only when the code shows the column is built from later rows or from
+  the label (the code review, or code you read), or when its meaning, read against the prediction time,
+  cannot be known then and has no plausible legitimate reading. If your reason needs "may", "might",
+  "could" or "if", the column only might leak: put it in suspected, not in findings. A project whose
+  only concern is such a column is inconclusive.
 - "inconclusive" is a good answer when the evidence is insufficient.
 - "not_found" claims there is no flaw: it needs checks A to E run and nothing suspected.
 - Report accuracy next to the majority-class baseline and an imbalance-aware metric when available.

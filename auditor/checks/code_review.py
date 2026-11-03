@@ -21,9 +21,14 @@ from pathlib import Path
 from typing import Any
 
 from auditor.checks.base import CheckResult
+from auditor.sandbox.base import SKIP_DIRS
 
 CHECK_ID = "R_code_review"
 MAX_ITEMS = 30
+# Library and tooling folders an uploaded project may contain: their code is not the experiment.
+REVIEW_SKIP_DIRS = SKIP_DIRS | {"venv", "env", ".env", "site-packages", "node_modules", ".ipynb_checkpoints",
+                                "build", "dist", ".tox", ".mypy_cache"}
+MAX_FILES = 200
 RESAMPLERS = {"resample", "fit_resample", "SMOTE", "RandomOverSampler", "ADASYN"}
 AGGREGATES = {"mean", "median", "sum", "max", "min", "std", "count", "size", "nunique", "quantile", "var"}
 STATISTICS = {"mean", "std", "median", "var", "min", "max", "quantile"}
@@ -47,8 +52,7 @@ class Item:
 
 
 def review_project(project_dir: Path, entry_script: str, time_column: str | None = None) -> CheckResult:
-    files = sorted(p for p in Path(project_dir).rglob("*.py")
-                   if not ({".venv", "__pycache__", ".ipynb_checkpoints"} & set(p.parts)))
+    files = project_python_files(Path(project_dir))
     items: list[Item] = []
     unreadable = []
     for path in files:
@@ -79,6 +83,19 @@ def review_project(project_dir: Path, entry_script: str, time_column: str | None
                                                                              for p in files],
                   "unparseable_files": unreadable},
     )
+
+
+def project_python_files(project_dir: Path) -> list[Path]:
+    """The project's own .py files: no virtual environments (any folder with pyvenv.cfg), no
+    tooling folders, at most MAX_FILES, the shallowest first."""
+    venvs = [cfg.parent for cfg in project_dir.rglob("pyvenv.cfg")]
+    files = []
+    for path in project_dir.rglob("*.py"):
+        rel = path.relative_to(project_dir)
+        if REVIEW_SKIP_DIRS.intersection(rel.parts[:-1]) or any(v in path.parents for v in venvs):
+            continue
+        files.append(path)
+    return sorted(files, key=lambda f: (len(f.relative_to(project_dir).parts), str(f)))[:MAX_FILES]
 
 
 def review_source(file: str, source: str, tree: ast.AST, is_entry: bool, time_series: bool) -> list[Item]:

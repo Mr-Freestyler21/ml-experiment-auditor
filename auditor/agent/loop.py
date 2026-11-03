@@ -176,7 +176,7 @@ def _trim_old_outputs(history: list[dict[str, Any]], bulky: list[tuple[int, int,
     return kept
 
 
-def budget_warning(used: int, cap: int, steps_left: int, warned: set[str]) -> str | None:
+def budget_warning(used: int, cap: int | None, steps_left: int, warned: set[str]) -> str | None:
     """A message telling the model to wrap up (or finalize now) as the budget runs low, once each."""
     share = used / cap if cap else 0.0
     if "finalize" not in warned and (share >= FINALIZE_AT[0] or steps_left <= FINALIZE_AT[1]):

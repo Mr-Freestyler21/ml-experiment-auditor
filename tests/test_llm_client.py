@@ -106,3 +106,16 @@ def test_no_key_means_no_client(tmp_path, monkeypatch):
     (tmp_path / ".env").write_text("META_MODEL_API_KEY=\n", encoding="utf-8")
 
     assert meta_client_from_env(tmp_path) is None
+
+
+def test_there_is_no_token_cap_by_default(tmp_path, monkeypatch):
+    from auditor.agent.llm_client import MAX_OUTPUT_PER_REQUEST, meta_client_from_env
+
+    budget = TokenBudget()
+    budget.record("muse-spark-1.3", {"input": 10**7, "cached": 0, "output": 0, "reasoning": 0, "total": 10**7}, 1.0, "x")
+    assert budget.max_output_for_next_call() == MAX_OUTPUT_PER_REQUEST
+    assert budget.summary()["cap"] is None
+
+    monkeypatch.setenv("META_MODEL_API_KEY", "test-key")
+    monkeypatch.setenv("AUDITOR_MAX_TOKENS", "5000")  # an old .env setting no longer caps audits
+    assert meta_client_from_env(tmp_path).budget.cap is None

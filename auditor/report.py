@@ -327,7 +327,8 @@ def render_markdown(r: dict[str, Any], audit_dir: Path) -> str:
 
     add("## 8. Cost and time\n")
     c = r["cost"]
-    add(f"Model `{c['model']}`: {c['calls']} calls, {c['tokens']} tokens (cap {c['cap']}), estimated "
+    cap = f" (cap {c['cap']})" if c.get("cap") else ""
+    add(f"Model `{c['model']}`: {c['calls']} calls, {c['tokens']} tokens{cap}, estimated "
         f"${c['est_cost_usd']:.4f}. {c['steps']} agent steps in {c['duration_s']} s "
         f"(stopped: {r['stopped_because']}).\n")
 

@@ -82,8 +82,8 @@ Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
 - **Guardrails.** Every claim must cite evidence ids; `confirmed` needs a flagged check; every
   number in Muse's text must appear in a tool result (an invented number is rejected and sent
   back). A fix may change the evaluation only: code rejects any change to how the model is
-  built. As the step or token budget runs low, Muse is told to wrap up and finalize; a cap that
-  is still reached ends the audit as `inconclusive`, never as a guess.
+  built. As the step cap nears, Muse is told to wrap up and finalize; a cap that is still
+  reached ends the audit as `inconclusive`, never as a guess.
 - **Report.** `report.md`, `report.json` and a self-contained `report.html`, built by code from
   the evidence, plus the full transcript. Findings are ranked by severity with their measured
   impact, followed by suspicions that are not proven, how far to trust the corrected score
@@ -142,7 +142,8 @@ python -m auditor.cli demo --replay
 ```
 
 For live audits, copy `.env.example` to `.env` and set `META_MODEL_API_KEY` (a Meta Model API
-key) and `AUDITOR_MAX_TOKENS` (a per-audit cap; 200000 is plenty).
+key). There is no token cap by default: every audit is bounded by its step cap (30 model turns;
+a deep audit of a messy pipeline costs well under $1). `audit --max-tokens N` sets a cap.
 
 ## Commands
 

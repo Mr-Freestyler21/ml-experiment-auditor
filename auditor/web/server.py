@@ -296,8 +296,8 @@ def ui_event(kind: str, data: dict[str, Any]) -> dict[str, Any] | None:
         from auditor.agent.prompts import FINALIZE_NOW
 
         if data.get("text") == FINALIZE_NOW:
-            return {"type": "note", "text": "Budget almost spent: Muse was asked to finalize now."}
-        return {"type": "note", "text": "Most of the budget is used, so Muse was asked to wrap up and give its verdict."}
+            return {"type": "note", "text": "At the step limit: Muse was asked to finalize now."}
+        return {"type": "note", "text": "Close to the step limit, so Muse was asked to wrap up and give its verdict."}
     return None
 
 

@@ -50,7 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--no-llm", action="store_true", help="rules only: do not ask the Meta model for suspects")
     audit = commands.add_parser("audit", help="full audit: the Meta model investigates using the checks as tools")
     audit.add_argument("project", type=Path, help="folder containing audit.yaml")
-    audit.add_argument("--max-tokens", type=int, help="token cap for this audit (default: AUDITOR_MAX_TOKENS)")
+    audit.add_argument("--max-tokens", type=int, help="optional token cap for this audit (default: none; "
+                       "the step cap bounds every audit)")
     audit.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS, help="maximum model turns")
     demo = commands.add_parser("demo", help="audit the F1 project and the clean project, then open both reports")
     demo.add_argument("--replay", action="store_true", help="replay the recorded audits in examples/ (no API key)")
@@ -160,8 +161,9 @@ def _audit(config: AuditConfig, sandbox: Sandbox, max_tokens: int | None, max_st
         client.budget.cap = max_tokens
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     audit_dir = REPO_ROOT / "runs" / f"audit-{stamp}"
-    print(f"Auditing {config.project_dir.name} with {client.model} (max {max_steps} steps, "
-          f"{client.budget.cap} tokens). Transcript: {audit_dir}")
+    cap = f", {client.budget.cap} tokens" if client.budget.cap else ""
+    print(f"Auditing {config.project_dir.name} with {client.model} (max {max_steps} steps{cap}). "
+          f"Transcript: {audit_dir}")
     session = load_session(config, sandbox, work_dir=audit_dir / "evidence")
     result = run_agent(session, client, audit_dir, max_steps=max_steps, on_event=_show_event)
     _print_verdict(result)

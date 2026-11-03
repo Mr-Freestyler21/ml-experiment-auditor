@@ -335,7 +335,7 @@ def test_budget_warnings_become_note_cards():
     final = ui_event("budget_warning", {"step": 14, "text": prompts.FINALIZE_NOW})
 
     assert wrap["type"] == final["type"] == "note"
-    assert "wrap up" in wrap["text"] and "finalize now" in final["text"]
+    assert "wrap up" in wrap["text"] and "finalize now" in final["text"] and "step limit" in final["text"]
 
 
 def test_a_live_job_with_budget_warnings_streams_only_drawable_cards(server, monkeypatch):

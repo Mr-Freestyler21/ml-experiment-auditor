@@ -18,7 +18,6 @@ from typing import Any
 
 BASE_URL = "https://api.meta.ai/v1"
 DEFAULT_MODEL = "muse-spark-1.3"
-DEFAULT_MAX_TOKENS = 20_000
 # Reasoning counts as output: planning several patches can take well over 4,000 tokens.
 MAX_OUTPUT_PER_REQUEST = 16_000
 # Extra waits (seconds) after the SDK's own quick retries fail, to ride out network outages.
@@ -39,11 +38,14 @@ class BudgetExceeded(RuntimeError):
 
 @dataclass
 class TokenBudget:
-    cap: int
+    # No cap by default: an audit is bounded by its step cap. A cap (e.g. --max-tokens) is opt-in.
+    cap: int | None = None
     used: int = 0
     calls: list[dict[str, Any]] = field(default_factory=list)
 
     def max_output_for_next_call(self) -> int:
+        if self.cap is None:
+            return MAX_OUTPUT_PER_REQUEST
         remaining = self.cap - self.used
         if remaining <= 0:
             raise BudgetExceeded(f"token cap reached: used {self.used} of {self.cap}")
@@ -123,7 +125,7 @@ def parse_tool_call(name: str, call_id: str, raw: str) -> ToolCall:
 
 
 class MetaLLMClient(LLMClient):
-    def __init__(self, api_key: str, model: str = DEFAULT_MODEL, max_tokens: int = DEFAULT_MAX_TOKENS) -> None:
+    def __init__(self, api_key: str, model: str = DEFAULT_MODEL, max_tokens: int | None = None) -> None:
         from openai import OpenAI
 
         # The SDK retries connection errors and 429/5xx responses with backoff.
@@ -239,8 +241,4 @@ def meta_client_from_env(repo_root: Path) -> MetaLLMClient | None:
     key = os.environ.get("META_MODEL_API_KEY")
     if not key:
         return None
-    return MetaLLMClient(
-        api_key=key,
-        model=os.environ.get("META_MODEL_NAME") or DEFAULT_MODEL,
-        max_tokens=int(os.environ.get("AUDITOR_MAX_TOKENS") or DEFAULT_MAX_TOKENS),
-    )
+    return MetaLLMClient(api_key=key, model=os.environ.get("META_MODEL_NAME") or DEFAULT_MODEL)

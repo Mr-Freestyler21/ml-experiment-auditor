@@ -253,9 +253,44 @@ def _install():
     _wrap_parallel()
 
 
+def _run_preparation():
+    """Scripts in $AUDIT_PREPARE_SCRIPTS rebuild the data file before training; they run untraced.
+    The data file they produce is copied to the output folder as prepared_data.csv."""
+    import shutil
+
+    scripts = json.loads(os.environ.get("AUDIT_PREPARE_SCRIPTS") or "[]")
+    for script in scripts:
+        path = os.path.abspath(script)
+        saved = list(sys.argv)
+        sys.argv = [path]
+        runpy.run_path(path, run_name="__main__")
+        sys.argv = saved
+    data = os.environ.get("AUDIT_DATA_PATH")
+    if scripts and data and os.path.isfile(data):
+        shutil.copyfile(data, os.path.join(os.environ["AUDIT_OUTPUT_DIR"], "prepared_data.csv"))
+    _shuffle_column(data)
+
+
+def _shuffle_column(data):
+    """$AUDIT_SHUFFLE_COLUMN: scramble that column of the (rebuilt) data file before training,
+    to measure how much the result depends on it."""
+    column = os.environ.get("AUDIT_SHUFFLE_COLUMN")
+    if not column or not data or not os.path.isfile(data):
+        return
+    import pandas as pd
+
+    frame = pd.read_csv(data)
+    if column not in frame.columns:
+        raise RuntimeError(f"AUDIT_SHUFFLE_COLUMN: {column!r} is not a column of {data}")
+    seed = int(os.environ.get("AUDIT_SHUFFLE_SEED") or 0)
+    frame[column] = frame[column].sample(frac=1.0, random_state=seed).to_numpy()
+    frame.to_csv(data, index=False)
+
+
 def main():
     import joblib
 
+    _run_preparation()
     _install()
     _log({"event": "tracer", "joblib_backend": "sequential (forced)", "joblib_version": joblib.__version__})
     script_dir = os.path.dirname(_script)

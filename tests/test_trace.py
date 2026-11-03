@@ -31,6 +31,18 @@ def test_fit_then_predict_and_proba_on_same_rows_is_one_split():
     assert (s.fit_line, s.predict_line, s.predict_methods) == (20, 22, ("predict", "predict_proba"))
 
 
+def test_predictions_on_the_training_rows_are_not_evaluations():
+    events = [
+        call(1, 9, "fit", rows=[0, 1, 2], has_y=True, cls="RF"),
+        call(2, 9, "predict", rows=[0, 1, 2]),  # a training score
+        call(3, 9, "predict", rows=[3]),
+    ]
+
+    [s] = extract_splits(events)
+
+    assert s.test_rows == [3]
+
+
 def test_each_cross_validation_fold_is_its_own_split():
     events = [
         call(1, 1, "fit", rows=[0, 1], has_y=True), call(2, 1, "predict", rows=[2]),

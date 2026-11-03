@@ -30,6 +30,9 @@ class AuditConfig:
     time_column: str | None = None
     random_seed: int | None = None
     timeout_seconds: int = 600
+    # Scripts that build data_path before the entry script runs (e.g. prepare.py), in order.
+    # When set, reruns regenerate the data file first; patched copies of them are rerun too.
+    prepare_scripts: tuple[str, ...] = field(default_factory=tuple)
 
 
 def load_config(project_dir: Path) -> AuditConfig:
@@ -60,13 +63,26 @@ def load_config(project_dir: Path) -> AuditConfig:
         time_column=_optional_str(raw, "time_column"),
         random_seed=int(raw["random_seed"]) if raw.get("random_seed") is not None else None,
         timeout_seconds=int(raw.get("timeout_seconds") or 600),
+        prepare_scripts=_scripts(raw.get("prepare_scripts")),
     )
     for key in ("entry_script", "data_path"):
         if not (project_dir / getattr(config, key)).is_file():
             raise ConfigError(f"{key} points to a file that does not exist: {getattr(config, key)}")
+    for script in config.prepare_scripts:
+        if not (project_dir / script).is_file():
+            raise ConfigError(f"prepare_scripts lists a file that does not exist: {script}")
     if config.timeout_seconds <= 0:
         raise ConfigError("timeout_seconds must be positive")
     return config
+
+
+def _scripts(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    items = [value] if isinstance(value, str) else value
+    if not isinstance(items, list) or not all(isinstance(s, str) and s.endswith(".py") for s in items):
+        raise ConfigError("prepare_scripts must be a .py file or a list of them")
+    return tuple(items)
 
 
 def _str(raw: dict[str, Any], key: str) -> str:

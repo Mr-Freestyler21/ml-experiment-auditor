@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -47,12 +48,27 @@ class BaselineResult:
         return data
 
 
+PIPELINE_RUNNER = Path(__file__).resolve().parent / "sandbox" / "pipeline_runner.py"
+PIPELINE_NAME = "_audit_pipeline.py"
+
+
+def pipeline_command(config: AuditConfig, files: dict[str, Path],
+                     prepare_scripts: Sequence[str] | None = None) -> tuple[list[str], dict[str, str]]:
+    """The command (and env) that runs the preparation scripts, then the entry script.
+
+    Adds the small pipeline runner to `files` when preparation scripts are involved.
+    """
+    scripts = list(config.prepare_scripts if prepare_scripts is None else prepare_scripts)
+    if not scripts:
+        return ["python", config.entry_script], {}
+    files[PIPELINE_NAME] = PIPELINE_RUNNER
+    return ["python", PIPELINE_NAME, *scripts, config.entry_script], {"AUDIT_DATA_PATH": config.data_path}
+
+
 def run_baseline(config: AuditConfig, sandbox: Sandbox) -> BaselineResult:
-    run = sandbox.run(
-        ["python", config.entry_script],
-        files=collect_files(config.project_dir),
-        timeout=config.timeout_seconds,
-    )
+    files = collect_files(config.project_dir)
+    command, env = pipeline_command(config, files)
+    run = sandbox.run(command, files=files, env=env, timeout=config.timeout_seconds)
     environment = _environment(sandbox)
     metrics, error = _read_metrics(run)
     measured = metrics.get(config.reported_metric) if metrics else None

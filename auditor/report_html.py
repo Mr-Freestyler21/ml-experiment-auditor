@@ -84,7 +84,8 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gri
 th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .scroll { overflow-x: auto; }
-ul.plain { padding-left: 18px; margin: 6px 0; }
+ul.plain, .card ol { padding-left: 18px; margin: 6px 0; }
+.card li { margin: 4px 0; }
 .chart svg { width: 100%; height: auto; display: block; }
 .chart .label { fill: var(--ink); font-size: 13px; }
 .chart .value { fill: var(--ink); font-size: 13px; font-weight: 600; }
@@ -142,16 +143,19 @@ def render_html(r: dict[str, Any]) -> str:
         "<div class='card verdict'>",
         f"<span class='badge tone-{tone}'><span class='icon' aria-hidden='true'>{icon}</span>"
         f"{_e(r['verdict'].replace('_', ' ').upper())}</span>",
-        f"<div><h1>{_e(verdict_text)}</h1><p>{_e(r['summary'])}</p>{_meta(r)}</div></div>",
+        f"<div><h1>{_e(verdict_text)}</h1><p>{_e(r['summary'])}</p>{_trust(r)}{_meta(r)}</div></div>",
         _chart_section(r, metric),
         _findings(r),
+        _suspected(r),
+        _recommendations(r),
+        _code_review(r),
         _patch(r),
         _evaluations_table(r, metric),
         _baseline(r, metric),
         _limits(r),
         _evidence(r),
         "<p class='foot'>Every number on this page comes from a tool result recorded as evidence. The model's own "
-        "text (verdict, findings, caveats) was accepted only after code checked that each claim cites evidence "
+        "text (verdict, findings, suspicions, recommendations, caveats) was accepted only after code checked that each claim cites evidence "
         "and that every number in it appears in a tool result.</p>",
         "</div><div id='tip' class='tooltip' role='status'></div></div>",
         f"<script>{TOOLTIP_JS}</script></body></html>",
@@ -271,34 +275,75 @@ def _findings(r: dict[str, Any]) -> str:
         code = ""
         if f.get("code"):
             lines = "".join(
-                f"<span class='codeline'><span class='ln'>{_e(c['line'])}</span>{_e(c['code'])}"
+                f"<span class='codeline'><span class='ln'>"
+                f"{_e(c['file'] + ':' if c.get('file') else '')}{_e(c['line'])}</span>{_e(c['code'])}"
                 f"  <span class='role'># {_e(c['role'])}</span></span>" for c in f["code"])
             code = f"<p class='sub'>Offending code</p><pre>{lines}</pre>"
         chips = "".join(f"<a class='chip' href='#{_e(e['id'])}' title='{_e(e['brief'])}'>{_e(e['id'])} "
                         f"{_e(e['tool'])}</a>" for e in f.get("evidence") or [])
+        severity = f" &middot; {_e(f['severity'])}" if f.get("severity") else ""
+        impact = f"<p><b>Impact:</b> {_e(f['impact'])}</p>" if f.get("impact") else ""
         cards.append(
-            f"<div class='card'><div class='family'>Family {_e(f['family'])} &middot; {_e(f.get('family_name'))}</div>"
-            f"<h3>{_e(f['title'])}</h3><p>{_e(f['explanation'])}</p>{code}<div>{chips}</div></div>"
+            f"<div class='card'><div class='family'>Family {_e(f['family'])} &middot; {_e(f.get('family_name'))}"
+            f"{severity}</div><h3>{_e(f['title'])}</h3><p>{_e(f['explanation'])}</p>{impact}{code}"
+            f"<div>{chips}</div></div>"
         )
     return "<h2>Findings</h2>" + "".join(cards)
 
 
-def _patch(r: dict[str, Any]) -> str:
-    p = r.get("patch")
-    if not p:
+def _trust(r: dict[str, Any]) -> str:
+    text = r.get("score_assessment")
+    return f"<p><b>Can the score be trusted?</b> {_e(text)}</p>" if text else ""
+
+
+def _suspected(r: dict[str, Any]) -> str:
+    items = [f"<li><b>{_e(x['title'])}.</b> {_e(x['explanation'])} "
+             + "".join(f"<a class='chip' href='#{_e(i)}'>{_e(i)}</a>" for i in x.get("evidence_ids", [])) + "</li>"
+             for x in r.get("suspected") or []]
+    if not items:
         return ""
-    lines = []
-    for line in p["diff"].splitlines():
-        if line.startswith(("+++", "---")):
-            continue
-        kind = "hunk" if line.startswith("@@") else "add" if line.startswith("+") else \
-            "del" if line.startswith("-") else "ctx"
-        lines.append(f"<span class='{kind}'>{_e(line) or '&nbsp;'}</span>")
+    return f"<h2>Suspected, not proven</h2><div class='card'><ul class='plain'>{''.join(items)}</ul></div>"
+
+
+def _recommendations(r: dict[str, Any]) -> str:
+    items = "".join(f"<li>{_e(x)}</li>" for x in r.get("recommendations") or [])
+    return f"<h2>Recommendations</h2><div class='card'><ol>{items}</ol></div>" if items else ""
+
+
+def _code_review(r: dict[str, Any]) -> str:
+    rows = "".join(
+        f"<tr><td><code>{_e(c['file'])}:{_e(c['line'])}</code></td><td>{_e(c['family'])}</td>"
+        f"<td>{_e(c['severity'])}</td><td>{_e(c['pattern'])}</td></tr>" for c in r.get("code_review") or [])
+    if not rows:
+        return ""
     return (
-        f"<h2>The fix</h2><div class='card'><p><b>{_e(p['id'])}</b> on <code>{_e(p['path'])}</code> "
-        f"({_e(p['lines_changed'])} lines changed). {_e(p['rationale'])}</p>"
-        f"<pre class='diff'>{''.join(lines)}</pre><p class='sub'>Applied to a copy; the original file is "
-        "unchanged. Code checked that the patch compiles and leaves the model's construction untouched.</p></div>"
+        "<h2>Code review</h2><div class='card scroll'><p class='sub'>Lines a deterministic review of every .py file "
+        "flagged for a closer look. Leads, not proof: the findings say which were verified.</p><table><thead><tr>"
+        "<th>Where</th><th>Family</th><th>Severity</th><th>Pattern</th></tr></thead><tbody>" + rows
+        + "</tbody></table></div>"
+    )
+
+
+def _patch(r: dict[str, Any]) -> str:
+    patches = r.get("patches") or ([r["patch"]] if r.get("patch") else [])
+    if not patches:
+        return ""
+    blocks = []
+    for p in patches:
+        lines = []
+        for line in p["diff"].splitlines():
+            if line.startswith(("+++", "---")):
+                continue
+            kind = "hunk" if line.startswith("@@") else "add" if line.startswith("+") else \
+                "del" if line.startswith("-") else "ctx"
+            lines.append(f"<span class='{kind}'>{_e(line) or '&nbsp;'}</span>")
+        blocks.append(f"<p><b>{_e(p['id'])}</b> on <code>{_e(p['path'])}</code> "
+                      f"({_e(p['lines_changed'])} lines changed). {_e(p['rationale'])}</p>"
+                      f"<pre class='diff'>{''.join(lines)}</pre>")
+    title = "The fix" if len(patches) == 1 else "The fixes"
+    return (
+        f"<h2>{title}</h2><div class='card'>{''.join(blocks)}<p class='sub'>Applied to a copy; the original files "
+        "are unchanged. Code checked that each patch compiles and leaves the model's construction untouched.</p></div>"
     )
 
 

@@ -274,3 +274,78 @@ def test_token_budget_ends_inconclusive(session, tmp_path):
     assert result.stopped_because == "token_budget"
     assert result.usage["calls"] == 3
     assert result.verdict["verdict"] == "inconclusive"
+
+
+# --- whole pipeline: a leak in the script that builds the data -------------------------
+
+PREPARE = """
+import pandas as pd
+df = pd.read_csv('raw.csv')
+df['trend'] = df['y'].rolling(3, center=True, min_periods=1).mean()
+df.to_csv('data.csv', index=False)
+"""
+PIPELINE_SCRIPT = SCRIPT.replace("df[['x']]", "df[['x', 'trend']]")
+CENTRED = "df['y'].rolling(3, center=True, min_periods=1).mean()"
+TRAILING = "df['y'].shift(1).rolling(3, min_periods=1).mean()"
+
+
+@pytest.fixture
+def pipeline_session(tmp_path: Path):
+    rng = np.random.default_rng(1)
+    folder = tmp_path / "pipeline"
+    folder.mkdir()
+    raw = pd.DataFrame({"site": [f"s{i % 12}" for i in range(240)], "year": [2020 + i // 80 for i in range(240)],
+                        "x": rng.normal(size=240), "y": rng.integers(0, 2, size=240)})
+    raw.to_csv(folder / "raw.csv", index=False)
+    raw.assign(trend=raw["y"].rolling(3, center=True, min_periods=1).mean()).to_csv(folder / "data.csv", index=False)
+    (folder / "audit.yaml").write_text(CONFIG, encoding="utf-8")
+    (folder / "train.py").write_text(PIPELINE_SCRIPT, encoding="utf-8")
+    (folder / "prepare.py").write_text(PREPARE, encoding="utf-8")
+    sandbox = LocalSandbox(python=Path(sys.executable), runs_dir=tmp_path / "runs")
+    return load_session(load_config(folder), sandbox, work_dir=tmp_path / "work")
+
+
+def test_code_review_reads_the_preparation_script(pipeline_session):
+    review = pipeline_session.call("run_check", {"check": "R"})
+
+    assert review["status"] == "flagged"
+    [item] = [i for i in review["evidence"]["items"] if i["pattern"] == "centred rolling window"]
+    assert (item["file"], item["line"], item["column"]) == ("prepare.py", 4, "trend")
+
+
+def test_a_patch_to_the_preparation_script_rebuilds_the_data(pipeline_session):
+    s = pipeline_session
+    s.call("run_baseline", {})
+    patch = s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": CENTRED, "new": TRAILING}],
+                                     "rationale": "use past labels only"})
+    patched = s.call("run_patched", {"patch_ids": [patch["patch_id"]]})
+
+    assert patch["accepted"] is True
+    assert patched["pipeline_rerun"] == ["prepare.py"] and patched["data_rebuilt"] is True
+    assert patched["change_vs_baseline"] < -0.1  # the centred label window was carrying the score
+    assert set(patched["checks_after_patch"]) >= {"A", "C_groups", "D", "E"}
+
+
+def test_check_b_uses_code_evidence_and_can_measure_on_top_of_patches(pipeline_session):
+    s = pipeline_session
+    on_flawed = s.call("run_check", {"check": "B", "suspects": [{"column": "trend", "reason": "centred window"}]})
+    patch = s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": CENTRED, "new": TRAILING}],
+                                     "rationale": "use past labels only"})
+    on_fixed = s.call("run_check", {"check": "B", "on_patches": [patch["patch_id"]],
+                                    "suspects": [{"column": "trend", "reason": "built from labels"}]})
+
+    assert on_flawed["status"] == "flagged"
+    [finding] = [f for f in on_flawed["evidence"]["shuffle_reruns"] if f["column"] == "trend"]
+    assert finding["code_evidence"]["file"] == "prepare.py"
+    assert "P1" in on_fixed["evidence"]["measured_under"]
+
+
+def test_run_patched_rejects_two_patches_to_one_file(pipeline_session):
+    s = pipeline_session
+    s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": CENTRED, "new": TRAILING}], "rationale": "a"})
+    s.call("propose_patch", {"path": "prepare.py", "edits": [{"old": "min_periods=1", "new": "min_periods=2"}],
+                             "rationale": "b"})
+
+    result = s.call("run_patched", {"patch_ids": ["P1", "P2"]})
+
+    assert "same file" in result["error"]

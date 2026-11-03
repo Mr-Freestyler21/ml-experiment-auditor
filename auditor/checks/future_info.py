@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import re
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -87,15 +87,30 @@ def feature_power(data: pd.DataFrame, features: Sequence[str], target: str) -> d
 
 
 def run_shuffled(
-    config: AuditConfig, sandbox: Sandbox, column: str, seed: int = 0
+    config: AuditConfig, sandbox: Sandbox, column: str, seed: int = 0,
+    split_override: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None, Path]:
-    """Rerun the script with one column of the data file shuffled. Returns (metrics, error, log_dir)."""
+    """Rerun the script with one column of the data file shuffled. Returns (metrics, error, log_dir).
+
+    With `split_override`, the rerun also swaps the script's split for an honest one (see
+    trace.run_traced). Preparation scripts never run here: they would rebuild the data file and
+    undo the shuffle.
+    """
     data = pd.read_csv(config.project_dir / config.data_path)
     data[column] = data[column].sample(frac=1.0, random_state=seed).to_numpy()
     files = collect_files(config.project_dir)
     with tempfile.TemporaryDirectory(prefix="audit-shuffle-") as tmp:
         shuffled = Path(tmp) / "data.csv"
         data.to_csv(shuffled, index=False)
+        if split_override is not None:
+            from auditor.trace import run_traced
+
+            traced = run_traced(config, sandbox, split_override=split_override,
+                                file_overrides={Path(config.data_path).as_posix(): shuffled}, prepare_scripts=[])
+            (traced.run.log_dir / "shuffled_column.txt").write_text(column, encoding="utf-8")
+            if traced.error or traced.metrics is None:
+                return None, f"rerun failed ({traced.error or 'no metrics.json'})", traced.run.log_dir
+            return traced.metrics, None, traced.run.log_dir
         files[Path(config.data_path).as_posix()] = shuffled
         run = sandbox.run(["python", config.entry_script], files=files, timeout=config.timeout_seconds)
     (run.log_dir / "shuffled_column.txt").write_text(column, encoding="utf-8")
@@ -211,7 +226,17 @@ def check_future_info(
     suspects: Sequence[Suspect],
     notes: dict[str, Any] | None = None,
     max_reruns: int = MAX_RERUNS,
+    split_override: dict[str, Any] | None = None,
+    rerun: Callable[[str], tuple[dict[str, Any] | None, str | None, Path]] | None = None,
+    code_evidence: dict[str, dict[str, Any]] | None = None,
+    measured_under: str | None = None,
 ) -> CheckResult:
+    """`split_override`: measure under that honest split; `baseline_metrics` are then the metrics
+    under the same split, so each shuffle is compared like with like. `rerun(column)` replaces
+    the default shuffle rerun (e.g. on top of accepted patches). `code_evidence` maps a column to
+    a code-review item showing it is built from later rows: then any measurable dependence is
+    enough, because the code already proves the timing."""
+    code_evidence = code_evidence or {}
     if not features:
         return _result("not_applicable", "The model's feature names are unknown (it was not trained on a DataFrame).")
     if config.target not in data.columns:
@@ -230,12 +255,19 @@ def check_future_info(
         p = power.get(col)
         if p is not None and p >= NEAR_PERFECT_POWER and col not in by_column:
             by_column[col] = [Suspect(col, "rules", f"near-perfect single-feature power {p}")]
+    for col, item in code_evidence.items():
+        if col in in_data and col not in by_column:
+            by_column[col] = [Suspect(col, "code", f"{item['file']} line {item['line']}: {item['pattern']}")]
 
     evidence: dict[str, Any] = {
         "features": list(features),
         "feature_power": power,
         "suspects": [asdict(s) for s in suspects],
         "suspect_notes": notes or {},
+        "measured_under": measured_under or (
+            f"an honest {split_override['strategy']} split, so copied rows and neighbouring rows cannot hide a leak"
+            if split_override else "the script's own split"),
+        "baseline_under_that_split": baseline,
         "shuffle_reruns": [],
     }
     if not by_column:
@@ -243,22 +275,34 @@ def check_future_info(
 
     chance = chance_level(config.reported_metric, data[config.target])
     evidence["chance_level"] = chance
-    ranked = sorted(by_column, key=lambda c: -(power.get(c) or 0))
+    # Columns the code proves are built from later rows first, then by single-feature power.
+    ranked = sorted(by_column, key=lambda c: (c not in code_evidence, -(power.get(c) or 0)))
     findings, skipped = [], ranked[max_reruns:]
     for col in ranked[:max_reruns]:
-        metrics, error, log_dir = run_shuffled(config, sandbox, col, seed=config.random_seed or 0)
+        if rerun is not None:
+            metrics, error, log_dir = rerun(col)
+        else:
+            metrics, error, log_dir = run_shuffled(config, sandbox, col, seed=config.random_seed or 0,
+                                                   split_override=split_override)
         shuffled_value = metrics.get(config.reported_metric) if metrics else None
         drop = round(float(baseline) - float(shuffled_value), 4) if isinstance(shuffled_value, (int, float)) else None
+        strength = dependence_strength(drop, power.get(col), float(baseline), chance)
+        basis = "measured dependence"
+        if col in code_evidence and strength == "weak":
+            strength, basis = "strong", "code builds it from later rows, and the result depends on it"
         findings.append({
             "column": col,
             "sources": sorted({s.source for s in by_column[col]}),
             "reasons": [s.reason for s in by_column[col]],
+            "code_evidence": ({k: code_evidence[col][k] for k in ("file", "line", "code", "pattern")}
+                              if col in code_evidence else None),
             "single_feature_power": power.get(col),
             "baseline": baseline,
             "shuffled": shuffled_value,
             "metric_drop": drop,
             "margin_above_chance": round(float(baseline) - chance, 4) if chance is not None else None,
-            "dependence": dependence_strength(drop, power.get(col), float(baseline), chance),
+            "dependence": strength,
+            "basis": basis,
             "error": error,
             "log_dir": str(log_dir),
         })

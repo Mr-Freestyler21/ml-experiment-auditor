@@ -1,10 +1,10 @@
 """Validate the model's final verdict before it is accepted.
 
 Rules (the project's core rules: evidence or no claim, three verdicts, model never invents numbers):
-  - every finding and caveat cites evidence ids that exist;
+  - every finding, suspicion and caveat cites evidence ids that exist;
   - a finding of family X cites a run_check(X) result whose status is "flagged";
   - confirmed needs at least one finding; not_found and inconclusive have none;
-  - not_found needs checks A, B and C all to have run without error;
+  - not_found needs checks A to E all to have run without error, and no suspicions;
   - every number in the text appears in some tool result (allowing rounding, percentages
     and sign), so the model cannot introduce numbers of its own.
 """
@@ -18,7 +18,8 @@ from typing import Any
 from auditor.agent.tools import EvidenceItem
 
 VERDICTS = ("confirmed", "not_found", "inconclusive")
-FAMILIES = ("A", "B", "C")
+FAMILIES = ("A", "B", "C", "D", "E")
+SEVERITIES = ("critical", "major", "minor")
 # Small whole numbers ("three checks", "2 splits") are allowed without a source.
 FREE_INTEGER_MAX = 10
 NUMBER = re.compile(r"(?<![A-Za-z_\d])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)")
@@ -32,14 +33,17 @@ def validate_verdict(verdict: dict[str, Any], evidence: Sequence[EvidenceItem]) 
         return [f"verdict must be one of {list(VERDICTS)}"]
     findings = verdict.get("findings") or []
     caveats = verdict.get("caveats") or []
+    suspected = verdict.get("suspected") or []
     if not isinstance(verdict.get("summary"), str) or not verdict["summary"].strip():
         problems.append("summary must be a non-empty string")
 
     for i, f in enumerate(findings):
         label = f"finding {i + 1}"
         if f.get("family") not in FAMILIES:
-            problems.append(f"{label}: family must be A, B or C")
+            problems.append(f"{label}: family must be one of {list(FAMILIES)}")
             continue
+        if f.get("severity") is not None and f["severity"] not in SEVERITIES:
+            problems.append(f"{label}: severity must be one of {list(SEVERITIES)}")
         ids = _check_ids(f.get("evidence_ids"), by_id, label, problems)
         if not any(_is_flagged_check(by_id[i_], f["family"]) for i_ in ids):
             problems.append(
@@ -48,6 +52,8 @@ def validate_verdict(verdict: dict[str, Any], evidence: Sequence[EvidenceItem]) 
             )
     for i, c in enumerate(caveats):
         _check_ids(c.get("evidence_ids"), by_id, f"caveat {i + 1}", problems)
+    for i, item in enumerate(suspected):
+        _check_ids(item.get("evidence_ids"), by_id, f"suspected {i + 1}", problems)
 
     if v == "confirmed" and not findings:
         problems.append("confirmed needs at least one finding")
@@ -56,11 +62,16 @@ def validate_verdict(verdict: dict[str, Any], evidence: Sequence[EvidenceItem]) 
     if v == "not_found":
         missing = [fam for fam in FAMILIES if not any(_is_check(e, fam) and not e.result.get("error") for e in evidence)]
         if missing:
-            problems.append(f"not_found needs checks A, B and C all run without error; missing: {missing}")
+            problems.append(f"not_found needs checks A to E all run without error; missing: {missing}")
+        if suspected:
+            problems.append("not_found claims there is no flaw; with suspicions, answer inconclusive")
 
     texts = [verdict.get("summary", "")]
-    texts += [f.get("title", "") + " " + f.get("explanation", "") for f in findings]
+    texts += [" ".join(str(f.get(k) or "") for k in ("title", "explanation", "impact")) for f in findings]
+    texts += [str(x.get("title") or "") + " " + str(x.get("explanation") or "") for x in suspected]
     texts += [c.get("text", "") for c in caveats]
+    texts += [str(verdict.get("score_assessment") or "")]
+    texts += [str(r) for r in verdict.get("recommendations") or []]
     unsupported = unsupported_numbers(texts, evidence)
     if unsupported:
         problems.append(

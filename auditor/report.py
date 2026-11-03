@@ -1,7 +1,8 @@
 """Write report.md and report.json from an audit's evidence.
 
 Code fills in every table and number from evidence items. The only text from the model
-is its verdict (summary, findings, caveats), which passed validation before it was
+is its verdict (summary, findings, suspicions, score assessment, recommendations, caveats),
+which passed validation before it was
 accepted: each claim cites evidence ids and every number in it appears in a tool result.
 """
 
@@ -20,7 +21,10 @@ FAMILY_NAMES = {
     "A": "Preprocessing fitted on test rows",
     "B": "Information not available at prediction time",
     "C": "Same entities or later periods in train and test",
+    "D": "The same rows in train and test",
+    "E": "Choices made on the test rows",
 }
+SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2}
 
 
 def write_report(session: AuditSession, result: AgentResult, model: str) -> Path:
@@ -39,7 +43,10 @@ def build_report(session: AuditSession, result: AgentResult, model: str) -> dict
     by_id = session.evidence_by_id()
     script_lines = (config.project_dir / config.entry_script).read_text(encoding="utf-8").splitlines()
     patch_runs = [e for e in session.evidence if e.tool == "run_patched" and not e.result.get("error")]
-    patch = session.patches.get(patch_runs[-1].result["patch_id"]) if patch_runs else None
+    ids = (patch_runs[-1].result.get("patch_ids") or [patch_runs[-1].result.get("patch_id")]) if patch_runs else []
+    patches = [{"id": p.id, "path": p.path, "rationale": p.rationale, "lines_changed": p.lines_changed, "diff": p.diff}
+               for p in (session.patches.get(i) for i in ids) if p is not None]
+    findings = sorted(verdict.get("findings", []), key=lambda f: SEVERITY_ORDER.get(f.get("severity"), 1))
 
     return {
         "project": config.project_dir.name,
@@ -48,11 +55,13 @@ def build_report(session: AuditSession, result: AgentResult, model: str) -> dict
         "stopped_because": result.stopped_because,
         "baseline": _baseline(session),
         "context_metrics": _context_metrics(session),
-        "findings": [_finding(f, by_id, session, script_lines) for f in verdict.get("findings", [])],
-        "patch": {
-            "id": patch.id, "path": patch.path, "rationale": patch.rationale,
-            "lines_changed": patch.lines_changed, "diff": patch.diff,
-        } if patch else None,
+        "findings": [_finding(f, by_id, session, script_lines) for f in findings],
+        "suspected": verdict.get("suspected") or [],
+        "score_assessment": verdict.get("score_assessment") or "",
+        "recommendations": verdict.get("recommendations") or [],
+        "code_review": _code_review(session),
+        "patches": patches,
+        "patch": patches[0] if patches else None,
         "evaluations": _evaluations(session),
         "caveats": verdict.get("caveats", []),
         "limits": _limits(session, result),
@@ -99,8 +108,14 @@ def _context_metrics(session: AuditSession) -> dict[str, Any]:
 def _finding(f: dict[str, Any], by_id: dict[str, EvidenceItem], session: AuditSession, lines: list[str]) -> dict[str, Any]:
     cited = [by_id[i] for i in f.get("evidence_ids", []) if i in by_id]
     code = {}
+    review = []
     for e in cited:
         if e.tool != "run_check":
+            continue
+        if e.arguments.get("check") == "R":
+            review += [{"line": i.get("line"), "file": i.get("file"), "code": i.get("code"), "role": i.get("why")}
+                       for i in e.result.get("evidence", {}).get("items", []) or []
+                       if isinstance(i, dict) and i.get("family") == f["family"]]
             continue
         for split in e.result.get("evidence", {}).get("splits", []) or []:
             if isinstance(split, dict):
@@ -120,9 +135,17 @@ def _finding(f: dict[str, Any], by_id: dict[str, EvidenceItem], session: AuditSe
     return {
         **f,
         "family_name": FAMILY_NAMES.get(f["family"], f["family"]),
-        "code": quoted,
+        "code": quoted + [c for c in review if c["file"] != session.config.entry_script],
         "evidence": [{"id": e.id, "tool": e.tool, "brief": _brief(e)} for e in cited],
     }
+
+
+def _code_review(session: AuditSession) -> list[dict[str, Any]]:
+    """Every line the code review flagged (all .py files), from the deterministic review."""
+    if session._review is None:
+        return []
+    keys = ("file", "line", "family", "severity", "pattern", "code", "why")
+    return [{k: i.get(k) for k in keys} for i in session._review.evidence.get("items", []) if isinstance(i, dict)]
 
 
 def _evaluations(session: AuditSession) -> list[dict[str, Any]]:
@@ -179,7 +202,7 @@ def _limits(session: AuditSession, result: AgentResult) -> list[str]:
         limits.append(f"The audit stopped before the model finalized ({result.stopped_because}); the verdict is "
                       "therefore inconclusive.")
     ran = {e.arguments.get("check"): e for e in session.evidence if e.tool == "run_check"}
-    for family in ("A", "B", "C"):
+    for family in FAMILY_NAMES:
         e = ran.get(family)
         if e is None:
             limits.append(f"Check {family} ({FAMILY_NAMES[family]}) was not run.")
@@ -201,6 +224,14 @@ def render_markdown(r: dict[str, Any], audit_dir: Path) -> str:
     add(f"# Audit report: {r['project']}\n")
     add(f"## 1. Verdict: **{r['verdict'].upper()}**\n")
     add(r["summary"] + "\n")
+    if r.get("score_assessment"):
+        add(f"**Can the score be trusted?** {r['score_assessment']}\n")
+    if r["findings"]:
+        add("| # | Severity | Family | Finding | Impact |\n|---|---|---|---|---|")
+        for i, f in enumerate(r["findings"], 1):
+            add(f"| 4.{i} | {f.get('severity', '')} | {f['family']} | {_cell(f['title'], 90)} | "
+                f"{_cell(f.get('impact') or '', 90)} |")
+        add("")
 
     add("## 2. Reproduced baseline\n")
     b = r["baseline"]
@@ -225,23 +256,41 @@ def render_markdown(r: dict[str, Any], audit_dir: Path) -> str:
     if not r["findings"]:
         add("No evaluation flaw was confirmed.\n")
     for i, f in enumerate(r["findings"], 1):
-        add(f"### 4.{i} [{f['family']}] {f['title']}\n")
+        severity = f" ({f['severity']})" if f.get("severity") else ""
+        add(f"### 4.{i} [{f['family']}] {f['title']}{severity}\n")
         add(f"*{f['family_name']}*\n")
         add(f["explanation"] + "\n")
+        if f.get("impact"):
+            add(f"**Impact:** {f['impact']}\n")
         if f["code"]:
-            add("Offending code (`" + "`, `".join(sorted({str(c['line']) for c in f['code']})) + "`):\n")
+            add("Offending code:\n")
             add("```python")
             for c in f["code"]:
-                add(f"{c['line']:>4}  {c['code']}    # {c['role']}")
+                where = f"{c['file']}:{c['line']}" if c.get("file") else f"{c['line']:>4}"
+                add(f"{where}  {c['code']}    # {c['role']}")
             add("```\n")
         add("Evidence: " + "; ".join(f"**{e['id']}** {e['tool']}: {e['brief']}" for e in f["evidence"]) + "\n")
 
+    if r.get("suspected"):
+        add("### Suspected, not proven\n")
+        for x in r["suspected"]:
+            add(f"- **{x['title']}.** {x['explanation']} ({', '.join(x['evidence_ids'])})")
+        add("")
+    if r.get("code_review"):
+        add("### Code review (every .py file)\n")
+        add("Lines a deterministic review flagged for a closer look. Leads, not proof: the findings above say "
+            "which were verified.\n")
+        add("| Where | Family | Severity | Pattern |\n|---|---|---|---|")
+        for c in r["code_review"]:
+            add(f"| `{c['file']}:{c['line']}` | {c['family']} | {c['severity']} | {_cell(c['pattern'] or '', 100)} |")
+        add("")
+
     add("## 5. Patch\n")
-    p = r["patch"]
-    if p:
+    for p in r.get("patches") or []:
         add(f"**{p['id']}** on `{p['path']}` ({p['lines_changed']} lines). {p['rationale']}\n")
         add("```diff\n" + p["diff"].rstrip() + "\n```\n")
-        add(f"The original file is unchanged; the patch was applied to a copy (`evidence/patch_{p['id']}.diff`).\n")
+    if r.get("patches"):
+        add("The original files are unchanged; patches were applied to a copy (`evidence/patch_<id>.diff`).\n")
     else:
         add("No patch was applied.\n")
 
@@ -260,6 +309,12 @@ def render_markdown(r: dict[str, Any], audit_dir: Path) -> str:
         add("")
     else:
         add("No re-evaluation was run.\n")
+
+    if r.get("recommendations"):
+        add("### Recommendations\n")
+        for i, rec in enumerate(r["recommendations"], 1):
+            add(f"{i}. {rec}")
+        add("")
 
     add("## 7. Limits and caveats\n")
     for c in r["caveats"]:

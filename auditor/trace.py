@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -81,11 +82,14 @@ def run_traced(
     sandbox: Sandbox,
     split_override: dict[str, Any] | None = None,
     file_overrides: dict[str, Path] | None = None,
+    prepare_scripts: Sequence[str] | None = None,
+    shuffle_column: str | None = None,
 ) -> TracedRun:
     """Run the script under the tracer.
 
     `split_override` swaps its train_test_split (see trace_launcher); `file_overrides`
     replaces project files in the sandbox copy (a patched script), never the originals.
+    `prepare_scripts` (default: the config's) run first and rebuild the data file.
     """
     files = collect_files(config.project_dir)
     if LAUNCHER_NAME in files:
@@ -93,6 +97,14 @@ def run_traced(
     files.update(file_overrides or {})
     files[LAUNCHER_NAME] = LAUNCHER_SOURCE
     env = {}
+    scripts = list(config.prepare_scripts if prepare_scripts is None else prepare_scripts)
+    if scripts:
+        env["AUDIT_PREPARE_SCRIPTS"] = json.dumps(scripts)
+    if scripts or shuffle_column:
+        env["AUDIT_DATA_PATH"] = config.data_path
+    if shuffle_column:
+        env["AUDIT_SHUFFLE_COLUMN"] = shuffle_column
+        env["AUDIT_SHUFFLE_SEED"] = str(config.random_seed or 0)
     if split_override is not None:
         env["AUDIT_SPLIT_OVERRIDE"] = json.dumps({**split_override, "data_path": config.data_path})
     run = sandbox.run(
@@ -140,6 +152,8 @@ def extract_splits(events: list[dict[str, Any]]) -> list[EvaluationSplit]:
         # on the same test set count as one evaluation).
         by_rows: dict[str, list[dict[str, Any]]] = {}
         for p in preds:
+            if _in_sample(fit, p):
+                continue  # a prediction on the model's own training rows (a training score), not an evaluation
             key = json.dumps(p.get("rows")) if p.get("rows") is not None else f"n={p.get('n_rows')}"
             by_rows.setdefault(key, []).append(p)
         for group in by_rows.values():
@@ -170,6 +184,13 @@ def extract_splits(events: list[dict[str, Any]]) -> list[EvaluationSplit]:
     for obj in list(open_fits):
         close(obj)
     return [_recover_rows(s, events) for s in splits]
+
+
+def _in_sample(fit: dict[str, Any], prediction: dict[str, Any]) -> bool:
+    """True when a prediction was made on exactly the rows the model was fitted on."""
+    if fit.get("rows") is not None and prediction.get("rows") is not None:
+        return prediction["rows"] == fit["rows"]
+    return False
 
 
 def _recover_rows(split: EvaluationSplit, events: list[dict[str, Any]]) -> EvaluationSplit:

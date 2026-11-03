@@ -2,6 +2,9 @@
 
     python -m auditor.cli serve            # opens http://127.0.0.1:8000
 
+A zip without an audit.yaml is converted (auditor/convert.py) and kept pending until the
+person confirms the settings on the page; only then does it appear as a project.
+
 Local only, by design: it listens on 127.0.0.1, refuses requests whose Host is not
 localhost (DNS rebinding), requires a custom header on every POST (a cross-site page
 cannot send one without the server's consent), limits upload size, and extracts zips
@@ -14,6 +17,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -30,6 +34,7 @@ from auditor.agent.llm_client import LLMClient
 from auditor.agent.loop import run_agent
 from auditor.agent.tools import load_session
 from auditor.config import ConfigError, load_config
+from auditor.convert import ConversionResult, confirm_settings, convert, extract_zip
 from auditor.demo import describe_call, describe_result
 from auditor.report import write_report
 from auditor.sandbox import Sandbox
@@ -88,6 +93,8 @@ class AuditorApp:
             items.append({"id": folder, "title": title, "kind": "demo",
                           "replay": (self.repo / example / "evidence" / "transcript.jsonl").exists()})
         for path in sorted(self.uploads.glob("*/project"), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not (path.parent / "upload.json").is_file():
+                continue  # a conversion still waiting for confirmation
             meta = json.loads((path.parent / "upload.json").read_text(encoding="utf-8"))
             items.append({"id": f"upload/{path.parent.name}", "title": meta["title"], "kind": "upload", "replay": False})
         return items
@@ -97,12 +104,13 @@ class AuditorApp:
             if project_id == folder:
                 return self.repo / folder
         match = re.fullmatch(r"upload/([0-9a-f]{12})", project_id)
-        if match and (self.uploads / match.group(1) / "project").is_dir():
+        if match and (self.uploads / match.group(1) / "upload.json").is_file():
             return self.uploads / match.group(1) / "project"
         raise ValueError(f"unknown project {project_id!r}")
 
     def upload(self, filename: str, data: bytes) -> dict[str, Any]:
-        """Save a zip, extract it safely, and check it has a valid audit.yaml."""
+        """Save a zip and extract it safely. With one audit.yaml it is added as it is; with none,
+        it is converted and waits for the person to confirm the settings."""
         if len(data) > MAX_UPLOAD_BYTES:
             raise ValueError(f"the zip is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
         try:
@@ -116,8 +124,11 @@ class AuditorApp:
             raise ValueError("the zip expands to too much data")
         roots = {safe_member_path(m.filename).parent for m in members
                  if safe_member_path(m.filename).name == "audit.yaml"}
-        if len(roots) != 1:
-            raise ValueError("the zip must contain exactly one audit.yaml (next to train.py)")
+        if not roots:
+            return self._convert_upload(filename, data)
+        if len(roots) > 1:
+            raise ValueError("the zip must contain exactly one audit.yaml (next to train.py), "
+                             "or none to have the project converted")
         root = roots.pop()
 
         upload_id = uuid.uuid4().hex[:12]
@@ -136,6 +147,63 @@ class AuditorApp:
         title = Path(filename).stem or config.entry_script
         (target.parent / "upload.json").write_text(json.dumps({"title": title}), encoding="utf-8")
         return {"id": f"upload/{upload_id}", "title": title}
+
+    # --- converting uploads without an audit.yaml ---
+
+    def _convert_upload(self, filename: str, data: bytes) -> dict[str, Any]:
+        upload_id = uuid.uuid4().hex[:12]
+        base = self.uploads / upload_id
+        try:
+            source = extract_zip(data, base / "source")
+            state = {"title": Path(filename).stem or "project", "source": source.relative_to(base).as_posix()}
+            result = convert(source, base / "project", self.sandbox_factory())
+        except Exception:
+            shutil.rmtree(base, ignore_errors=True)
+            raise
+        return self._save_conversion(upload_id, state, result)
+
+    def convert_again(self, project_id: str, target: str | None, metric: str | None) -> dict[str, Any]:
+        """Rerun a pending conversion with a target or metric the person supplied."""
+        base, state = self._pending(project_id)
+        shutil.rmtree(base / "project", ignore_errors=True)
+        try:
+            result = convert(base / state["source"], base / "project", self.sandbox_factory(),
+                             target=target or None, metric=metric or None)
+        except Exception as exc:
+            # Stay pending but not confirmable, so a stale "ready" state cannot be confirmed.
+            failed = ConversionResult(out_dir=base / "project", source=state["title"], problems=[str(exc)])
+            self._save_conversion(base.name, state, failed)
+            raise
+        return self._save_conversion(base.name, state, result)
+
+    def confirm(self, project_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+        """Write the confirmed settings to audit.yaml and make the upload a project."""
+        if not isinstance(settings, dict):
+            raise ValueError("settings must be an object")
+        base, state = self._pending(project_id)
+        result = ConversionResult.from_json(state["result"])
+        confirm_settings(result, settings)
+        (base / "upload.json").write_text(json.dumps({"title": state["title"]}), encoding="utf-8")
+        return {"id": project_id, "title": state["title"]}
+
+    def discard(self, project_id: str) -> dict[str, Any]:
+        base, _ = self._pending(project_id)
+        shutil.rmtree(base, ignore_errors=True)
+        return {"discarded": project_id}
+
+    def _pending(self, project_id: str) -> tuple[Path, dict[str, Any]]:
+        match = re.fullmatch(r"upload/([0-9a-f]{12})", str(project_id))
+        base = self.uploads / match.group(1) if match else None
+        if base is None or not (base / "conversion.json").is_file() or (base / "upload.json").is_file():
+            raise ValueError(f"no conversion waiting for confirmation: {project_id!r}")
+        return base, json.loads((base / "conversion.json").read_text(encoding="utf-8"))
+
+    def _save_conversion(self, upload_id: str, state: dict[str, Any], result: ConversionResult) -> dict[str, Any]:
+        state = {**state, "result": result.to_json()}
+        (self.uploads / upload_id / "conversion.json").write_text(json.dumps(state, default=str), encoding="utf-8")
+        return {"id": f"upload/{upload_id}", "title": state["title"], "converted": True, "ready": result.ready,
+                "config": result.config, "suggestions": result.suggestions, "notes": result.notes,
+                "problems": result.problems, "metrics": result.metrics}
 
     # --- jobs ---
 
@@ -313,6 +381,16 @@ def make_handler(app: AuditorApp, port: int) -> type[BaseHTTPRequestHandler]:
                     request = json.loads(body or b"{}")
                     job = app.start(str(request.get("project")), str(request.get("mode", "live")))
                     self._send(HTTPStatus.OK, {"job": job.id})
+                elif self.path == "/api/convert":
+                    request = json.loads(body or b"{}")
+                    self._send(HTTPStatus.OK, app.convert_again(str(request.get("project")), request.get("target"),
+                                                                request.get("metric")))
+                elif self.path == "/api/confirm":
+                    request = json.loads(body or b"{}")
+                    self._send(HTTPStatus.OK, app.confirm(str(request.get("project")), request.get("settings")))
+                elif self.path == "/api/discard":
+                    request = json.loads(body or b"{}")
+                    self._send(HTTPStatus.OK, app.discard(str(request.get("project"))))
                 else:
                     self._send(HTTPStatus.NOT_FOUND, {"error": "not found"})
             except RuntimeError as exc:

@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from auditor.agent.llm_client import LLMResponse, ScriptedLLMClient, parse_tool_call
+from auditor.config import load_config
 from auditor.sandbox import LocalSandbox
 from auditor.web.server import AuditorApp, safe_member_path, serve
 
@@ -210,3 +211,101 @@ def test_replay_is_only_for_recorded_demos(app):
 
     with pytest.raises(ValueError, match="only the demo projects"):
         app.start(added["id"], "replay")
+
+
+# --- converting uploads without an audit.yaml -------------------------------------------
+
+CONVERTIBLE = """import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+df = pd.read_csv('data.csv')
+X, y = df[['x']], df['y']
+X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, random_state=0)
+model = RandomForestClassifier(n_estimators=20, random_state=0).fit(X_tr, y_tr)
+print(accuracy_score(y_te, model.predict(X_te)))
+"""
+
+
+def convertible_zip(script: str = CONVERTIBLE) -> bytes:
+    with_config = zipfile.ZipFile(io.BytesIO(project_zip()))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("myproject/data.csv", with_config.read("myproject/data.csv"))
+        z.writestr("myproject/model.py", script)
+    return buffer.getvalue()
+
+
+def test_upload_without_audit_yaml_is_converted_and_waits_for_confirmation(app):
+    converted = app.upload("sites.zip", convertible_zip())
+
+    assert converted["converted"] and converted["ready"], converted["problems"]
+    assert converted["config"]["target"] == "y" and converted["config"]["reported_metric"] == "accuracy"
+    assert [g["column"] for g in converted["suggestions"]["group_columns"]] == ["site"]
+    assert all(p["id"] != converted["id"] for p in app.projects())  # pending, not a project yet
+    with pytest.raises(ValueError, match="unknown project"):
+        app.project_dir(converted["id"])
+
+    added = app.confirm(converted["id"], {"target": "y", "reported_metric": "accuracy", "reported_value": 0.9,
+                                          "prediction_time": "At sign-up, using what is known then.",
+                                          "group_columns": ["site"], "time_column": None})
+
+    assert any(p["id"] == added["id"] for p in app.projects())
+    config = load_config(app.project_dir(added["id"]))
+    assert config.group_columns == (("site",),) and config.reported_value == 0.9
+    assert config.prediction_time == "At sign-up, using what is known then."
+    with pytest.raises(ValueError, match="no conversion waiting"):
+        app.confirm(converted["id"], {})  # only once
+
+
+@pytest.mark.parametrize("settings, message", [
+    ({"target": "nope"}, "not a column"),
+    ({"group_columns": [["site", "missing"]]}, "not a column"),
+    ({"group_columns": ["y"]}, "target cannot also be a group"),
+    ({"reported_metric": "made_up"}, "was not measured"),
+    ({"reported_value": "high"}, "must be a number"),
+    ({"entry_script": "evil.py"}, "unknown settings"),
+])
+def test_confirmed_settings_are_validated(app, settings, message):
+    converted = app.upload("sites.zip", convertible_zip())
+
+    with pytest.raises(ValueError, match=message):
+        app.confirm(converted["id"], settings)
+
+
+def test_missing_target_can_be_given_and_converted_again(app):
+    script = CONVERTIBLE.replace("X, y = df[['x']], df['y']", "X, labels = df[['x']], df.iloc[:, -1]")
+    script = script.replace("(X, y,", "(X, labels,")
+    converted = app.upload("sites.zip", convertible_zip(script))
+    assert not converted["ready"] and "target column could not be detected" in converted["problems"][0]
+    with pytest.raises(ValueError, match="problems to fix first"):
+        app.confirm(converted["id"], {})
+
+    again = app.convert_again(converted["id"], target="y", metric=None)
+
+    assert again["ready"], again["problems"]
+    assert app.confirm(again["id"], {})["id"] == converted["id"]
+
+
+def test_discard_removes_a_pending_conversion(app):
+    converted = app.upload("sites.zip", convertible_zip())
+
+    app.discard(converted["id"])
+
+    with pytest.raises(ValueError, match="no conversion waiting"):
+        app.confirm(converted["id"], {})
+
+
+def test_convert_and_confirm_over_http(server):
+    status, data = request(server, "POST", "/api/upload", convertible_zip(), {"X-Filename": "sites.zip"})
+    converted = json.loads(data)
+    assert status == 200 and converted["converted"]
+
+    body = json.dumps({"project": converted["id"], "settings": {"group_columns": ["missing"]}})
+    status, data = request(server, "POST", "/api/confirm", body)
+    assert status == 400 and "not a column" in json.loads(data)["error"]
+
+    body = json.dumps({"project": converted["id"], "settings": {"group_columns": ["site"]}})
+    status, _ = request(server, "POST", "/api/confirm", body)
+    _, projects = request(server, "GET", "/api/projects")
+    assert status == 200 and converted["id"] in [p["id"] for p in json.loads(projects)["projects"]]

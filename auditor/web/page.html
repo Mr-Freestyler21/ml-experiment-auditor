@@ -83,6 +83,21 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--border); border-rad
   border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -1px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .hidden { display: none !important; }
+.form { display: grid; gap: 16px; margin-top: 6px; }
+.field label, .field .label { display: block; font-weight: 600; margin-bottom: 4px; }
+.field .hint { color: var(--ink-2); font-size: 13px; margin: 2px 0 6px; }
+.field select, .field input[type=number], .field input[type=text], .field textarea {
+  font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; width: 100%; max-width: 520px; box-sizing: border-box; }
+.field textarea { min-height: 64px; resize: vertical; }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.row .field { flex: 1 1 220px; }
+.checks { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.checks label { font-weight: 400; display: flex; gap: 8px; align-items: center; }
+.problems { margin: 6px 0 10px; padding-left: 20px; color: var(--critical); }
+details { color: var(--ink-2); font-size: 13px; }
+details ul { padding-left: 20px; }
+details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -102,8 +117,9 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--border); border-rad
         </div>
         <div id="keynote" class="note"></div>
         <div class="upload">
-          <p>Audit your own project: a .zip with your training script, the CSV and an
-            <code>audit.yaml</code> (see <code>demo/f1/audit.yaml</code>).</p>
+          <p>Audit your own project: a .zip with your training script or notebook and the CSV.
+            With an <code>audit.yaml</code> it is added as it is; without one, the converter prepares
+            it and asks you to confirm the settings.</p>
           <input id="zip" type="file" accept=".zip">
           <div id="uploadmsg" class="msg"></div>
         </div>
@@ -111,6 +127,7 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--border); border-rad
       </div>
     </aside>
     <main>
+      <div id="convert" class="panel hidden" style="margin-bottom: 14px"></div>
       <div id="result" class="panel hidden" style="margin-bottom: 14px"></div>
       <div class="panel">
         <h2 id="timelinetitle">Investigation</h2>
@@ -180,7 +197,7 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--border); border-rad
     var p = current();
     $("run").disabled = running || !p || !$("run").dataset.haskey;
     $("replay").disabled = running || !p || !p.replay;
-    $("zip").disabled = running;
+    $("zip").disabled = running || !$("convert").classList.contains("hidden");
   }
 
   function start(mode) {
@@ -275,18 +292,238 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--border); border-rad
     }
   }
 
+  // --- converted uploads: confirm the settings the converter could not decide alone ---
+
+  function uploadMsg(text, error) {
+    $("uploadmsg").textContent = text; $("uploadmsg").className = error ? "msg error" : "msg";
+  }
+
+  function postJson(url, body) {
+    return post(url, JSON.stringify(body), { "Content-Type": "application/json" });
+  }
+
+  function field(labelText, hintText, input) {
+    var f = el("div", "field");
+    var label = el("label", null, labelText);
+    if (input.id) label.htmlFor = input.id;
+    f.appendChild(label);
+    if (hintText) f.appendChild(el("div", "hint", hintText));
+    f.appendChild(input);
+    return f;
+  }
+
+  function select(id, options, chosen) {
+    var s = el("select"); s.id = id;
+    options.forEach(function (o) {
+      var opt = el("option", null, o[1]); opt.value = o[0]; opt.selected = o[0] === chosen;
+      s.appendChild(opt);
+    });
+    return s;
+  }
+
+  function numericMetrics(metrics) {
+    return Object.keys(metrics || {}).filter(function (k) {
+      return typeof metrics[k] === "number" && k !== "n_test" && k !== "majority_class_accuracy";
+    });
+  }
+
+  function details(data) {
+    var d = el("details");
+    d.appendChild(el("summary", null, "What the converter did (" + data.notes.length + " steps)"));
+    var ul = el("ul");
+    data.notes.forEach(function (n) { ul.appendChild(el("li", null, n)); });
+    d.appendChild(ul);
+    if (numericMetrics(data.metrics).length) d.appendChild(el("pre", null, JSON.stringify(data.metrics, null, 2)));
+    return d;
+  }
+
+  function closeConversion(message) {
+    $("convert").classList.add("hidden");
+    $("convert").textContent = "";
+    $("zip").disabled = false;
+    if (message) uploadMsg(message);
+  }
+
+  function discardButton(data) {
+    var b = el("button", null, "Discard");
+    b.type = "button";
+    b.addEventListener("click", function () {
+      postJson("/api/discard", { project: data.id })
+        .then(function () { closeConversion("Discarded " + data.title + "."); })
+        .catch(function (err) { uploadMsg(err.message, true); });
+    });
+    return b;
+  }
+
+  function showConversion(data) {
+    var box = $("convert");
+    box.textContent = ""; box.classList.remove("hidden");
+    $("zip").disabled = true;  // one pending conversion at a time keeps the page simple
+    box.appendChild(el("h2", null, "Confirm settings: " + data.title));
+    if (!data.ready) return showProblems(box, data);
+
+    var cfg = data.config, sug = data.suggestions || {}, columns = sug.columns || [];
+    box.appendChild(el("div", "note", "Detected from your code and checked by running it once in the sandbox. " +
+      "Change anything that is wrong, then add the project."));
+    var form = el("form", "form");
+
+    var row = el("div", "row");
+    row.appendChild(field("Target column", "What the model predicts.",
+      select("c-target", columns.map(function (c) { return [c, c]; }), cfg.target)));
+    var metrics = numericMetrics(data.metrics);
+    var metric = select("c-metric", metrics.map(function (m) { return [m, m]; }), cfg.reported_metric);
+    row.appendChild(field("Metric to audit", "The number your result is judged by.", metric));
+    var value = el("input"); value.id = "c-value"; value.type = "number"; value.step = "any";
+    value.value = cfg.reported_value;
+    row.appendChild(field("Reported value", "The value you claimed. Pre-filled with the measured value.", value));
+    metric.addEventListener("change", function () {
+      var v = data.metrics[metric.value];
+      if (typeof v === "number") value.value = Math.round(v * 10000) / 10000;
+    });
+    form.appendChild(row);
+
+    var when = el("textarea"); when.id = "c-when";
+    when.placeholder = "Example: At the end of each lap, predict whether the driver pits on the next lap, " +
+      "using only information known when the current lap ends.";
+    form.appendChild(field("Prediction time (optional, recommended)",
+      "When is a prediction made, and what is known at that moment? This lets Muse spot features from the future.",
+      when));
+
+    var groupBox = el("div", "field");
+    groupBox.appendChild(el("div", "label", "Group columns (optional)"));
+    groupBox.appendChild(el("div", "hint", "Entities that will be NEW when the model is used, so they must not be " +
+      "in both train and test (patients, races). Leave out entities seen again in use. A wrong choice causes " +
+      "false alarms, so nothing is ticked for you."));
+    var checks = el("div", "checks");
+    (sug.group_columns || []).forEach(function (g) {
+      var options = [[g.column, g.column + " (" + g.distinct + " distinct values)"]];
+      if (g.with_time) options.push([[g.with_time, g.column], g.with_time + " + " + g.column +
+        " (one " + g.column + " in one " + g.with_time + " is one entity)"]);
+      options.forEach(function (o) {
+        var label = el("label"); var box2 = el("input"); box2.type = "checkbox";
+        box2.value = JSON.stringify(o[0]); box2.className = "c-group";
+        label.appendChild(box2); label.appendChild(document.createTextNode(o[1]));
+        checks.appendChild(label);
+      });
+    });
+    groupBox.appendChild(checks);
+    var other = el("input"); other.type = "text"; other.id = "c-groups-other";
+    other.placeholder = "Other columns, comma-separated. Join with + for a combined entity, e.g. Year+Race";
+    groupBox.appendChild(other);
+    form.appendChild(groupBox);
+
+    var suggested = (sug.time_column || []).map(function (t) { return t.column; });
+    var timeOptions = [["", "(none)"]].concat(
+      suggested.map(function (c) { return [c, c + " (suggested)"]; }),
+      columns.filter(function (c) { return suggested.indexOf(c) < 0 && c !== cfg.target; })
+        .map(function (c) { return [c, c]; }));
+    form.appendChild(field("Time column (optional)",
+      "If the model predicts the future, the auditor checks that training data ends before test data starts.",
+      select("c-time", timeOptions, "")));
+
+    var buttons = el("div", "buttons");
+    var add = el("button", "primary", "Add project"); add.type = "submit";
+    buttons.appendChild(add); buttons.appendChild(discardButton(data));
+    form.appendChild(buttons);
+    var msg = el("div", "msg"); form.appendChild(msg);
+    form.appendChild(details(data));
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var groups = Array.prototype.map.call(form.querySelectorAll(".c-group:checked"),
+        function (c) { return JSON.parse(c.value); });
+      other.value.split(",").forEach(function (part) {
+        var names = part.split("+").map(function (s) { return s.trim(); }).filter(Boolean);
+        if (names.length) groups.push(names.length === 1 ? names[0] : names);
+      });
+      var reported = parseFloat(value.value);
+      if (isNaN(reported)) { msg.textContent = "Reported value must be a number."; msg.className = "msg error"; return; }
+      add.disabled = true;
+      postJson("/api/confirm", { project: data.id, settings: {
+        target: $("c-target").value, reported_metric: metric.value, reported_value: reported,
+        prediction_time: when.value, group_columns: groups, time_column: $("c-time").value || null } })
+        .then(function (added) {
+          closeConversion("Added " + added.title + ". Select it and start a live audit.");
+          return loadProjects(added.id);
+        })
+        .catch(function (err) { msg.textContent = err.message; msg.className = "msg error"; add.disabled = false; });
+    });
+    box.appendChild(form);
+  }
+
+  function showProblems(box, data) {
+    box.appendChild(el("div", "msg error", "The converter could not prepare this project yet:"));
+    var ul = el("ul", "problems");
+    data.problems.forEach(function (p) {
+      ul.appendChild(el("li", null, p.replace(/ \(command line: [^)]*\)/, "")));  // CLI hints mean nothing here
+    });
+    box.appendChild(ul);
+    var columns = (data.suggestions && data.suggestions.columns) || [];
+    var needTarget = data.problems.some(function (p) { return p.indexOf("target column could not") >= 0; });
+    var needMetric = data.problems.some(function (p) { return p.indexOf("metric to audit could not") >= 0; });
+    var fixable = data.problems.every(function (p) {
+      return p.indexOf("target column could not") >= 0 || p.indexOf("metric to audit could not") >= 0;
+    });
+    var form = el("form", "form");
+    if (fixable && needTarget) {
+      var target = columns.length
+        ? select("p-target", [["", "(choose)"]].concat(columns.map(function (c) { return [c, c]; })), "")
+        : el("input");
+      target.id = "p-target"; if (!columns.length) target.type = "text";
+      form.appendChild(field("Target column", "The column the model predicts.", target));
+    }
+    if (fixable && needMetric) {
+      var m = el("input"); m.type = "text"; m.id = "p-metric"; m.placeholder = "accuracy";
+      form.appendChild(field("Metric to audit", "The name of a value your script writes to metrics.json.", m));
+    }
+    if (!fixable) form.appendChild(el("div", "note", "Fix these in your project and upload it again. " +
+      "The notes below show what the converter found."));
+    var buttons = el("div", "buttons");
+    if (fixable) { var again = el("button", "primary", "Convert again"); again.type = "submit"; buttons.appendChild(again); }
+    buttons.appendChild(discardButton(data));
+    form.appendChild(buttons);
+    var msg = el("div", "msg"); form.appendChild(msg);
+    form.appendChild(details(data));
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      msg.textContent = ""; msg.appendChild(el("span", "spinner"));
+      msg.appendChild(document.createTextNode("Converting again (runs your script once)..."));
+      again.disabled = true;
+      postJson("/api/convert", { project: data.id, target: $("p-target") ? $("p-target").value : null,
+                                  metric: $("p-metric") ? $("p-metric").value : null })
+        .then(function (result) {
+          uploadMsg(result.ready ? "Converted " + result.title + ". Confirm the settings on the right."
+                                 : "Still not ready; see the details on the right.", !result.ready);
+          showConversion(result);
+        })
+        .catch(function (err) { msg.textContent = err.message; msg.className = "msg error"; again.disabled = false; });
+    });
+    box.appendChild(form);
+  }
+
   $("run").addEventListener("click", function () { start("live"); });
   $("replay").addEventListener("click", function () { start("replay"); });
   $("zip").addEventListener("change", function () {
     var file = this.files[0];
     if (!file) return;
-    $("uploadmsg").textContent = "Checking " + file.name + "..."; $("uploadmsg").className = "msg";
+    $("uploadmsg").textContent = "";
+    $("uploadmsg").appendChild(el("span", "spinner"));
+    $("uploadmsg").appendChild(document.createTextNode("Checking " + file.name +
+      "... a project without audit.yaml is converted, which runs it once (up to a minute)."));
+    $("zip").disabled = true;
     post("/api/upload", file, { "Content-Type": "application/zip", "X-Filename": file.name })
       .then(function (data) {
-        $("uploadmsg").textContent = "Added " + data.title + ". Select it and start a live audit.";
+        if (data.converted) {
+          uploadMsg(data.ready ? "Converted " + data.title + ". Confirm the settings on the right."
+                               : "Could not convert " + data.title + " yet; see the details on the right.", !data.ready);
+          showConversion(data);
+          return;
+        }
+        $("zip").disabled = false;
+        uploadMsg("Added " + data.title + ". Select it and start a live audit.");
         return loadProjects(data.id);
       })
-      .catch(function (err) { $("uploadmsg").textContent = err.message; $("uploadmsg").className = "msg error"; })
+      .catch(function (err) { $("zip").disabled = false; uploadMsg(err.message, true); })
       .then(function () { $("zip").value = ""; });
   });
   loadProjects();

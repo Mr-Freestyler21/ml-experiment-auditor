@@ -6,6 +6,7 @@
   python -m auditor.cli audit demo/f1            # the Meta model investigates with the checks as tools
   python -m auditor.cli demo [--replay]          # the full demo: F1, then the clean project
   python -m auditor.cli serve                    # local web page: pick or upload a project
+  python -m auditor.cli convert f1.ipynb         # make an audit target from a notebook, script, folder or zip
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from auditor.checks.future_info import check_future_info, feature_power, llm_sus
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.checks.preprocessing import check_preprocessing
 from auditor.config import AuditConfig, ConfigError, load_config
+from auditor.convert import ConvertError, convert
 from auditor.demo import run_demo
 from auditor.report import write_report
 from auditor.sandbox import Sandbox, default_sandbox
@@ -54,8 +56,19 @@ def main(argv: list[str] | None = None) -> int:
     serve_cmd = commands.add_parser("serve", help="a local web page: pick or upload a project, watch the audit live")
     serve_cmd.add_argument("--port", type=int, default=8000)
     serve_cmd.add_argument("--no-open", action="store_true", help="do not open the page in a browser")
+    conv = commands.add_parser("convert", help="turn a notebook, script, folder or zip into an audit target")
+    conv.add_argument("source", type=Path, help="a folder, .zip, .py script or .ipynb notebook")
+    conv.add_argument("-o", "--out", type=Path, help="output folder (default: <source>-audit next to the source)")
+    conv.add_argument("--script", help="the file to convert, when a folder has several that train a model")
+    conv.add_argument("--target", help="target column, if it cannot be detected")
+    conv.add_argument("--metric", help="metric to audit, a key of metrics.json (default: the script's own metric)")
+    conv.add_argument("--reported-value", type=float, help="the value you claimed (default: the measured value)")
+    conv.add_argument("--cells", type=int, help="notebooks: keep code cells 1 to N (default: first experiment)")
+    conv.add_argument("--no-run", action="store_true", help="do not run the converted script in the sandbox")
     args = parser.parse_args(argv)
 
+    if args.command == "convert":
+        return _convert(args)
     if args.command == "serve":
         return _serve(args.port, open_page=not args.no_open)
     if args.command == "demo":
@@ -74,6 +87,37 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "audit":
         return _audit(config, sandbox, args.max_tokens, args.max_steps)
     return _check(config, sandbox, use_llm=not args.no_llm)
+
+
+def _convert(args: argparse.Namespace) -> int:
+    source = args.source.resolve()
+    out = args.out or source.with_name(f"{source.stem}-audit")
+    sandbox = None
+    if not args.no_run:
+        print("Preparing sandbox environment (first run installs packages)...")
+        sandbox = default_sandbox(REPO_ROOT)
+    try:
+        result = convert(source, out, sandbox, script=args.script, target=args.target, metric=args.metric,
+                         reported_value=args.reported_value, cells=args.cells)
+    except ConvertError as exc:
+        print(f"Cannot convert: {exc}", file=sys.stderr)
+        return 2
+    if result.already_configured:
+        print(f"{source} already has audit.yaml. Audit it directly: python -m auditor.cli audit \"{source}\"")
+        return 0
+    print("What the converter did:")
+    for note in result.notes:
+        print(f"  - {note}")
+    if result.problems:
+        print("Needs fixing before an audit:")
+        for problem in result.problems:
+            print(f"  - {problem}")
+        print(f"Wrote {out}, but it is not ready yet. See CONVERSION.md there.")
+        return 1
+    print(f"\nWrote {out}")
+    print("Confirm the commented suggestions in audit.yaml (prediction_time, group_columns, time_column), then:")
+    print(f"  python -m auditor.cli audit \"{out}\"")
+    return 0
 
 
 def _serve(port: int, open_page: bool) -> int:

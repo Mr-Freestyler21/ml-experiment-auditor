@@ -145,6 +145,31 @@ metric and value, a `prediction_time` sentence, and optionally `group_columns` (
 will be new in real use) and `time_column`. The script must write `metrics.json` to the folder
 in `AUDIT_OUTPUT_DIR`.
 
+Or let the converter do it, from a notebook, a script, a folder or a zip:
+
+```bash
+python -m auditor.cli convert path/to/analysis.ipynb     # writes path/to/analysis-audit/
+```
+
+Plain code, no model: it keeps the notebook's first complete experiment (up to the first cell
+that scores a fitted model; `--cells N` to change), removes plots and display-only lines, copies
+the CSV in and fixes its path, detects the target, adds a marked block that writes
+`metrics.json`, and runs the result once in the sandbox to measure `reported_value`. In a folder
+or zip it searches for what the script does not name directly: it picks the experiment among
+several scripts (not a test, runs at the top level, named like a training script), reads
+constants such as `TARGET` from the project files the script imports, finds the CSV when the
+path is built at run time, and puts the metrics block inside `main()` when the scoring happens
+there. When something cannot be found, it says exactly what is missing. It never
+switches on `prediction_time`, `group_columns` or `time_column`: those are written as commented
+suggestions to confirm, because a wrong group column causes false alarms. Your files are never
+changed, and `CONVERSION.md` in the output lists everything the converter did. Converting the
+original F1 notebook gives the same rules-only check results as the hand-made `demo/f1`.
+
+The web page does the same for a zip without an `audit.yaml`: it converts the upload, then shows
+a form with the detected target, metric and measured value, and the suggested group and time
+columns (none ticked). The project appears in the list only after you confirm, and the settings
+are checked first (real columns, a measured metric, a numeric value).
+
 ## Benchmark
 
 ```bash

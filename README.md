@@ -45,7 +45,7 @@ Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
 ## How it works
 
 ```
- your project ──> sandbox rerun ──> tracer ──> checks A / B / C ──┐
+ your project ──> sandbox rerun ──> tracer ──> checks A to E + R ┐
  (script, CSV,   (copy, no keys,   (which rows     (plain code)     │  tool results,
   audit.yaml)     timeout)          each fit and                    │  each an evidence id
                                     predict saw)                    v
@@ -62,20 +62,32 @@ Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
   `train_test_split` and records which rows each call saw and from which line of your script.
   It never changes the result: every check also reruns the script untraced and compares.
 - **Checks (deterministic).**
+  **R** a code review of every `.py` file, data preparation included: centred windows, shifts
+  into the future, resampling before the split, statistics over all rows, whole-period
+  aggregates, unchecked joins, metrics computed inside a selection loop. Each is a lead with
+  file and line, verified by the measuring checks.
   **A** preprocessing fitted on rows that include the test set (scikit-learn objects through the
   trace; plain-pandas statistics by reading the script).
   **B** features not known at prediction time: Muse proposes suspects from their meaning and
-  the `prediction_time` sentence, code measures each with a shuffle rerun.
+  the `prediction_time` sentence, code measures each with a shuffle rerun under an honest split
+  (or on top of accepted fixes, so one leak cannot hide another).
   **C** the same entities (patients, races) or later periods in both train and test.
-- **Agent.** Muse calls tools (`read_file`, `run_baseline`, `run_check`, `run_with_split`,
-  `propose_patch`, `run_patched`, `finalize`). `run_with_split` reruns your unchanged script
-  with its split swapped for a grouped, temporal or single-period one.
+  **D** the same rows on both sides: copies made by oversampling before the split, duplicated
+  records, duplicated keys.
+  **E** choices made on the test rows: several candidate models or thresholds scored on them.
+- **Agent.** Muse calls tools (`read_file`, `run_baseline`, `run_check`, `run_ablation`,
+  `run_with_split`, `propose_patch`, `run_patched`, `finalize`). `run_with_split` reruns your
+  unchanged script with its split swapped for a grouped, temporal or single-period one. Fixes
+  can go into the data preparation script too: the patched pipeline is rerun from the raw data.
 - **Guardrails.** Every claim must cite evidence ids; `confirmed` needs a flagged check; every
   number in Muse's text must appear in a tool result (an invented number is rejected and sent
   back). A fix may change the evaluation only: code rejects any change to how the model is
-  built. Step and token caps end an audit as `inconclusive`, never as a guess.
+  built. As the step or token budget runs low, Muse is told to wrap up and finalize; a cap that
+  is still reached ends the audit as `inconclusive`, never as a guess.
 - **Report.** `report.md`, `report.json` and a self-contained `report.html`, built by code from
-  the evidence, plus the full transcript.
+  the evidence, plus the full transcript. Findings are ranked by severity with their measured
+  impact, followed by suspicions that are not proven, how far to trust the corrected score
+  (an upper bound while known flaws remain), the code review table and concrete recommendations.
 
 ## Results
 
@@ -105,8 +117,12 @@ accused one honest project.
 - Tabular projects in Python with pandas and scikit-learn, one CSV, a run of a few minutes.
 - Row identity comes from pandas indexes; scripts that only use plain arrays get weaker evidence
   (row counts) or `not_applicable`.
-- Check B cannot see how a feature was computed. A 3-day average that secretly includes the next
-  day was reported as `inconclusive` (correctly suspicious, not proven) in the benchmark.
+- Check B measures dependence, not meaning. A future-derived feature whose effect is small, or
+  hidden by other leaks, stays "suspected" unless the code review shows how it was built.
+- A project with many interacting flaws can use the whole budget before every fix is written.
+  On the development project used for this (a pump-failure pipeline with a dozen planted
+  flaws) the audit confirmed one flaw in each of the five families, listed three more as
+  suspected, and reported the temporal score as an upper bound instead of a corrected score.
 - The benchmark projects are synthetic. They test the method, not every real-world codebase.
 - Data note: with Meta Model API free credits, content sent to the model may be used by Meta for
   product improvement. The auditor sends the script, column names, a few example values and the
@@ -132,7 +148,7 @@ key) and `AUDITOR_MAX_TOKENS` (a per-audit cap; 200000 is plenty).
 
 ```bash
 python -m auditor.cli baseline demo/f1    # rerun in the sandbox, compare with the reported score
-python -m auditor.cli check demo/f1       # the three checks (add --no-llm for rules only)
+python -m auditor.cli check demo/f1       # the deterministic checks (add --no-llm for rules only)
 python -m auditor.cli audit demo/f1       # full audit; writes runs/audit-<time>/report.{md,json,html}
 python -m auditor.cli demo [--replay]     # the demo
 python -m auditor.cli serve               # local web page: pick or upload a project, watch it live

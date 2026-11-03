@@ -24,9 +24,12 @@ from auditor.agent.loop import DEFAULT_MAX_STEPS, AgentResult, run_agent
 from auditor.agent.tools import load_session
 from auditor.baseline import TOLERANCE, BaselineResult, run_baseline
 from auditor.checks.base import CheckResult
+from auditor.checks.code_review import review_project
+from auditor.checks.duplicates import check_shared_rows
 from auditor.checks.future_info import check_future_info, feature_power, llm_suspects, rules_suspects
 from auditor.checks.group_overlap import check_group_overlap
 from auditor.checks.preprocessing import check_preprocessing
+from auditor.checks.selection import check_selection
 from auditor.config import AuditConfig, ConfigError, load_config
 from auditor.convert import ConvertError, convert
 from auditor.demo import run_demo
@@ -239,10 +242,14 @@ def _check(config: AuditConfig, sandbox: Sandbox, use_llm: bool) -> int:
         incomplete = "the traced run's metrics differ from the plain run, so the trace may not describe the same experiment"
 
     data = pd.read_csv(config.project_dir / config.data_path)
+    review = review_project(config.project_dir, config.entry_script, config.time_column)
     results = [
+        review,
         check_preprocessing(traced.events, traced.splits, incomplete, _script(config)),
         _check_b(config, sandbox, data, traced, plain.metrics, use_llm),
         check_group_overlap(data, traced.splits, config.group_columns, config.time_column, incomplete),
+        check_shared_rows(data, traced.splits, config.time_column, incomplete),
+        check_selection(traced.splits, review.evidence["items"], incomplete),
     ]
     (traced.run.log_dir / "metrics_comparison.json").write_text(json.dumps(same, indent=2), encoding="utf-8")
     for result in results:

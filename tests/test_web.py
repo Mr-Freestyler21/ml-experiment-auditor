@@ -17,7 +17,7 @@ import pytest
 from auditor.agent.llm_client import LLMResponse, ScriptedLLMClient, parse_tool_call
 from auditor.config import load_config
 from auditor.sandbox import LocalSandbox
-from auditor.web.server import AuditorApp, safe_member_path, serve
+from auditor.web.server import AuditorApp, safe_member_path, serve, ui_event
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -315,3 +315,41 @@ def test_convert_and_confirm_over_http(server):
     status, _ = request(server, "POST", "/api/confirm", body)
     _, projects = request(server, "GET", "/api/projects")
     assert status == 200 and converted["id"] in [p["id"] for p in json.loads(projects)["projects"]]
+
+
+def test_events_with_nothing_to_show_are_never_stored():
+    from auditor.web.server import Job
+
+    job = Job(id="j", project="p", mode="live")
+    job.add(None)
+    job.add(ui_event("model", {"step": 3, "text": "", "tool_calls": []}))  # an empty model turn
+    job.add(ui_event("some_future_kind", {}))
+
+    assert job.events == []
+
+
+def test_budget_warnings_become_note_cards():
+    from auditor.agent import prompts
+
+    wrap = ui_event("budget_warning", {"step": 11, "text": prompts.WRAP_UP})
+    final = ui_event("budget_warning", {"step": 14, "text": prompts.FINALIZE_NOW})
+
+    assert wrap["type"] == final["type"] == "note"
+    assert "wrap up" in wrap["text"] and "finalize now" in final["text"]
+
+
+def test_a_live_job_with_budget_warnings_streams_only_drawable_cards(server, monkeypatch):
+    # The bug: a budget warning was stored as null, the page failed on it and redrew the same
+    # events forever. Make the warning fire on step 1 and check every streamed event.
+    import auditor.agent.loop as loop
+
+    monkeypatch.setattr(loop, "WRAP_UP_AT", (0.0, 100))
+    _, added = request(server, "POST", "/api/upload", project_zip(), {"X-Filename": "sites.zip"})
+    _, data = request(server, "POST", "/api/audit",
+                      json.dumps({"project": json.loads(added)["id"], "mode": "live"}))
+
+    job, events = wait_for(server, json.loads(data)["job"])
+
+    assert job["status"] == "done"
+    assert all(isinstance(e, dict) and e.get("type") in ("group", "result", "stopped", "note") for e in events)
+    assert any(e["type"] == "note" for e in events)

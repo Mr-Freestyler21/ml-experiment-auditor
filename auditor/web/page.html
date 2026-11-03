@@ -60,6 +60,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .card.muse .who { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
 .card.call { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; color: var(--ink-2);
   border-style: dashed; }
+.card.note { font-size: 13px; color: var(--ink-2); font-style: italic; }
 .card.result { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
 .dot { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff;
   font-size: 12px; font-weight: 700; margin-top: 1px; background: var(--muted); }
@@ -219,6 +220,7 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
   }
 
   function addCard(card) {
+    if (!card || typeof card !== "object") return;
     var timeline = $("timeline");
     if (card.type === "muse") {
       var c = el("div", "card muse");
@@ -240,6 +242,10 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
       timeline.appendChild(r);
     } else if (card.type === "stopped") {
       timeline.appendChild(el("div", "card result", "Stopped: " + card.text));
+    } else if (card.type === "note") {
+      timeline.appendChild(el("div", "card note", card.text));
+    } else {
+      return;  // nothing this page knows how to draw
     }
     timeline.lastChild && timeline.lastChild.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
@@ -258,10 +264,12 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
       state.inflight = false;
       if (job_id !== state.job || since !== state.next) return;  // a stale answer
       state.misses = 0;
+      state.next = job.next;  // first, so a card that fails to draw is never fetched and drawn again
       job.events.forEach(function (event) {
-        if (event.type === "group") event.cards.forEach(addCard); else addCard(event);
+        try {
+          if (event && event.type === "group") (event.cards || []).forEach(addCard); else addCard(event);
+        } catch (err) { console.error("could not draw an audit event", event, err); }
       });
-      state.next = job.next;
       if (job.status !== "running") finish(job);
     }).catch(function (err) {
       state.inflight = false;

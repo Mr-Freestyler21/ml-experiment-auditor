@@ -61,7 +61,11 @@ class Job:
     error: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def add(self, event: dict[str, Any]) -> None:
+    def add(self, event: dict[str, Any] | None) -> None:
+        """Add a card for the page. Transcript events with nothing to show (None) are skipped: the
+        page reads the list by position, so every entry must be a card it can draw."""
+        if not event:
+            return
         with self.lock:
             self.events.append(event)
 
@@ -288,6 +292,12 @@ def ui_event(kind: str, data: dict[str, Any]) -> dict[str, Any] | None:
         return {"type": "result", "name": data.get("name"), "status": status, "text": text}
     if kind == "stopped":
         return {"type": "stopped", "text": str(data.get("reason"))}
+    if kind == "budget_warning":
+        from auditor.agent.prompts import FINALIZE_NOW
+
+        if data.get("text") == FINALIZE_NOW:
+            return {"type": "note", "text": "Budget almost spent: Muse was asked to finalize now."}
+        return {"type": "note", "text": "Most of the budget is used, so Muse was asked to wrap up and give its verdict."}
     return None
 
 

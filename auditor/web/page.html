@@ -245,12 +245,31 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
   }
 
   function poll() {
-    fetch("/api/jobs/" + state.job + "?since=" + state.next).then(function (r) { return r.json(); }).then(function (job) {
+    fetch("/api/jobs/" + state.job + "?since=" + state.next).then(function (r) {
+      if (r.status === 404) throw new Error("gone");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (job) {
+      state.misses = 0;
       job.events.forEach(function (event) {
         if (event.type === "group") event.cards.forEach(addCard); else addCard(event);
       });
       state.next = job.next;
       if (job.status !== "running") finish(job);
+    }).catch(function (err) {
+      // A missed update is retried; an audit the server does not know, or a server that stays
+      // unreachable, will not come back, so stop instead of spinning forever.
+      state.misses = (state.misses || 0) + 1;
+      if (err.message !== "gone" && state.misses < 10) return;
+      clearInterval(state.timer); state.timer = null; state.misses = 0;
+      $("timelinetitle").textContent = "Investigation (lost contact)";
+      updateButtons();
+      $("runmsg").textContent = err.message === "gone"
+        ? "This page lost track of the audit: the server answering it does not know this audit. That happens "
+          + "when the auditor was restarted, or when a second copy runs on the same port. The audit may have "
+          + "finished anyway: its report is saved in the runs folder."
+        : "The auditor stopped answering. Is it still running? Its reports are saved in the runs folder.";
+      $("runmsg").className = "msg error";
     });
   }
 

@@ -18,6 +18,8 @@ import io
 import json
 import re
 import shutil
+import socket
+import sys
 import threading
 import time
 import uuid
@@ -401,9 +403,25 @@ def make_handler(app: AuditorApp, port: int) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+class _ExclusiveServer(ThreadingHTTPServer):
+    """One auditor per port. http.server sets SO_REUSEADDR, which on Windows lets a second
+    server bind a port that is already in use and take some of its requests: a page then
+    asks the wrong server about its audit and stops updating."""
+
+    allow_reuse_address = sys.platform != "win32"
+    daemon_threads = True
+
+    def server_bind(self) -> None:
+        if sys.platform == "win32":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def serve(app: AuditorApp, port: int = 8000) -> ThreadingHTTPServer:
-    """Bind to 127.0.0.1 (port 0 picks a free port). Call serve_forever() on the result."""
-    server = ThreadingHTTPServer(("127.0.0.1", port), BaseHTTPRequestHandler)
+    """Bind to 127.0.0.1 (port 0 picks a free port). Call serve_forever() on the result.
+
+    Raises OSError when the port is already in use, for example by another running auditor.
+    """
+    server = _ExclusiveServer(("127.0.0.1", port), BaseHTTPRequestHandler)
     server.RequestHandlerClass = make_handler(app, server.server_address[1])
-    server.daemon_threads = True
     return server

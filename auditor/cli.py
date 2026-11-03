@@ -129,7 +129,12 @@ def _serve(port: int, open_page: bool) -> int:
     default_sandbox(REPO_ROOT)
     app = AuditorApp(REPO_ROOT, sandbox_factory=lambda: default_sandbox(REPO_ROOT),
                      client_factory=lambda: meta_client_from_env(REPO_ROOT))
-    server = serve(app, port)
+    try:
+        server = serve(app, port)
+    except OSError:
+        print(f"Port {port} is already in use, probably by an auditor that is already running: open "
+              f"http://127.0.0.1:{port}/ or stop that one first (or use --port).")
+        return 1
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     print(f"ML Experiment Auditor is running at {url}  (local only; press Ctrl+C to stop)")
     if open_page:

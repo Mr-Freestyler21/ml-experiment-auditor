@@ -147,6 +147,12 @@ def test_bad_uploads_are_rejected_with_a_reason(app, data, message):
 # --- request protections ----------------------------------------------------------------
 
 
+def test_a_second_server_on_a_busy_port_is_refused(app, server):
+    # On Windows the default SO_REUSEADDR let two servers share a port and split the requests.
+    with pytest.raises(OSError):
+        serve(app, port=server.server_address[1])
+
+
 def test_requests_from_other_hosts_are_refused(server):
     status, _ = request(server, "GET", "/api/projects", host="evil.example.com")
     assert status == 403

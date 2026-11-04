@@ -14,6 +14,7 @@ The originals are never modified: everything is written to a new output folder.
 from __future__ import annotations
 
 import ast
+import functools
 import io
 import json
 import re
@@ -152,6 +153,7 @@ def convert(source: Path, out_dir: Path, sandbox: Sandbox | None = None, *, scri
                                 "change with --script")
 
     code = _remove_plotting(code, result)
+    code = _modernise_imports(code, result)
     if entry.suffix == ".ipynb":
         code = _tidy_cells(code)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -373,6 +375,35 @@ def _call_name(call: ast.Call) -> str | None:
     if isinstance(call.func, ast.Attribute):
         return call.func.attr
     return None
+
+
+# --- old scikit-learn modules ---
+
+# Modules scikit-learn merged into sklearn.model_selection in 0.18 and removed in 0.20. Their
+# common functions (train_test_split, cross_val_score, GridSearchCV...) kept their names there.
+OLD_SKLEARN_MODULES = ("cross_validation", "grid_search", "learning_curve")
+
+
+def _modernise_imports(code: str, result: ConversionResult) -> str:
+    """Point imports of removed scikit-learn modules at sklearn.model_selection, so an older
+    tutorial runs on the sandbox's scikit-learn. Only the import lines change."""
+    changed = []
+    for old in OLD_SKLEARN_MODULES:
+        patterns = [
+            (rf"^(\s*)from\s+sklearn\.{old}\s+import\b", r"\1from sklearn.model_selection import"),
+            (rf"^(\s*)from\s+sklearn\s+import\s+{old}\s*$", rf"\1from sklearn import model_selection as {old}"),
+            (rf"^(\s*)import\s+sklearn\.{old}\s+as\s+(\w+)\s*$", r"\1import sklearn.model_selection as \2"),
+        ]
+        for pattern, replacement in patterns:
+            code, n = re.subn(pattern, replacement, code, flags=re.MULTILINE)
+            if n:
+                changed.append(old)
+    if changed:
+        names = ", ".join(f"sklearn.{m}" for m in dict.fromkeys(changed))
+        result.notes.append(f"Updated imports of {names} (removed in scikit-learn 0.20) to sklearn.model_selection, "
+                            "where the same functions live now; old-style calls such as KFold(n, n_folds=...) are "
+                            "not translated")
+    return code
 
 
 # --- plotting ---
@@ -760,15 +791,31 @@ def _metrics_footer(tree: ast.Module, code: str,
         indent = re.match(r"[ \t]*", code.splitlines()[statement.lineno - 1]).group()
         place = (line, indent)
 
-    last = scored[-1]
-    default_metric = METRICS[_call_name(last)][0]
-    labels = [c for c in scored if METRICS[_call_name(c)][1] in ("label", "regression")]
-    scores = [c for c in scored if METRICS[_call_name(c)][1] == "score"]
-    label_call = labels[-1] if labels else None
-    score_call = scores[-1] if scores else None
-    source = (label_call or score_call)
-    y_true = _segment(code, _metric_args(source)[0])
-    regression = label_call is not None and METRICS[_call_name(label_call)][1] == "regression"
+    # Explicit metric functions win; `model.score(X, y)` is used only when the script has nothing else.
+    functions = [c for c in scored if not _is_estimator_score(c)]
+    if functions:
+        last = functions[-1]
+        default_metric = METRICS[_call_name(last)][0]
+        labels = [c for c in functions if METRICS[_call_name(c)][1] in ("label", "regression")]
+        scores = [c for c in functions if METRICS[_call_name(c)][1] == "score"]
+        label_call = labels[-1] if labels else None
+        score_call = scores[-1] if scores else None
+        source = (label_call or score_call)
+        y_true = _segment(code, _metric_args(source)[0])
+        y_pred = _segment(code, _metric_args(label_call)[1]) if label_call is not None else None
+        regression = label_call is not None and METRICS[_call_name(label_call)][1] == "regression"
+        score_expr = (_segment(code, _metric_args(score_call)[1]) if score_call is not None
+                      else _proba_expression(scope, code, label_call))
+    else:
+        # model.score(X, y): accuracy for a classifier, R² for a regressor (scikit-learn's definition),
+        # recomputed here as y against model.predict(X).
+        source = scored[-1]
+        model = _segment(code, source.func.value)
+        x_arg, y_arg = (_segment(code, a) for a in _metric_args(source))
+        regression = _estimator_kind(tree, source.func.value) == "regressor"
+        default_metric = "r2" if regression else "accuracy"
+        y_true, y_pred = y_arg, f"{model}.predict({_wrap(x_arg)})"
+        score_expr = None if regression else f"{model}.predict_proba({_wrap(x_arg)})[:, 1]"
 
     lines = [
         "# --- Added by the auditor's converter: write metrics.json where the sandbox collects it. ---",
@@ -783,8 +830,8 @@ def _metrics_footer(tree: ast.Module, code: str,
         f"_y_true = _pd.Series(_np.ravel({_wrap(y_true)})).reset_index(drop=True)",
         "_out = {'n_test': int(len(_y_true))}",
     ]
-    if label_call is not None:
-        lines.append(f"_y_pred = _np.ravel({_wrap(_segment(code, _metric_args(label_call)[1]))})")
+    if y_pred is not None:
+        lines.append(f"_y_pred = _np.ravel({_wrap(y_pred)})")
     if regression:
         lines += [
             "_out['r2'] = float(_metrics.r2_score(_y_true, _y_pred))",
@@ -798,7 +845,7 @@ def _metrics_footer(tree: ast.Module, code: str,
             "_average = 'binary' if _binary else 'macro'",
             "_out['majority_class_accuracy'] = float(_y_true.value_counts(normalize=True).max())",
         ]
-        if label_call is not None:
+        if y_pred is not None:
             lines += [
                 "_out['accuracy'] = float(_metrics.accuracy_score(_y_true, _y_pred))",
                 "_out['balanced_accuracy'] = float(_metrics.balanced_accuracy_score(_y_true, _y_pred))",
@@ -806,8 +853,6 @@ def _metrics_footer(tree: ast.Module, code: str,
                 "                   ('f1', _metrics.f1_score)):",
                 "    _out[_name] = float(_fn(_y_true, _y_pred, average=_average, zero_division=0))",
             ]
-        score_expr = (_segment(code, _metric_args(score_call)[1]) if score_call is not None
-                      else _proba_expression(scope, code, label_call))
         if score_expr:
             lines += [
                 "try:  # ranking metrics need probabilities; skipped if the model has none",
@@ -832,7 +877,46 @@ def _metrics_footer(tree: ast.Module, code: str,
 
 
 def _is_scoring(call: ast.Call) -> bool:
-    return _call_name(call) in METRICS and len(_metric_args(call)) == 2
+    return (_call_name(call) in METRICS and len(_metric_args(call)) == 2) or _is_estimator_score(call)
+
+
+def _is_estimator_score(call: ast.Call) -> bool:
+    """`model.score(X, y)`: every scikit-learn estimator's own default metric."""
+    return isinstance(call.func, ast.Attribute) and call.func.attr == "score" and len(call.args) == 2
+
+
+def _estimator_kind(tree: ast.Module, model: ast.expr) -> str:
+    """"regressor" or "classifier" for the model behind `model.score(...)`, from the scikit-learn class
+    the script builds it with (`knn = KNeighborsClassifier(...)`). Unknown models count as classifiers."""
+    if isinstance(model, ast.Call):  # LogisticRegression().fit(X, y).score(...) and the like
+        built = [model]
+    elif isinstance(model, ast.Name):
+        built = [n.value for n in ast.walk(tree) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+                 and any(isinstance(t, ast.Name) and t.id == model.id for t in n.targets)]
+    else:
+        built = []
+    regressors = _sklearn_regressor_names()
+    for call in reversed(built):
+        name = _call_name(call)
+        while name in ("fit",) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Call):
+            call = call.func.value  # Model(...).fit(X, y)
+            name = _call_name(call)
+        if name in regressors:
+            return "regressor"
+        if name is not None and name[:1].isupper():
+            return "classifier"
+    return "classifier"
+
+
+@functools.cache
+def _sklearn_regressor_names() -> frozenset[str]:
+    import warnings
+
+    from sklearn.utils import all_estimators
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return frozenset(name for name, _ in all_estimators(type_filter="regressor"))
 
 
 def _scoring_function(tree: ast.Module, result: ConversionResult):

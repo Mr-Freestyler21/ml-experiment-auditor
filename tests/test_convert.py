@@ -294,3 +294,82 @@ def test_an_empty_notebook_given_directly_is_explained(tmp_path):
 
     with pytest.raises(ConvertError, match="not a readable notebook"):
         convert(notebook, tmp_path / "out", reported_value=0.8)
+
+
+# --- model.score(X, y) and old scikit-learn imports (common in tutorials) ---
+
+
+def test_model_score_is_measured_as_accuracy_for_a_classifier(sandbox, tmp_path):
+    folder = tmp_path / "project"
+    folder.mkdir()
+    write_data(folder / "data.csv")
+    knn = ("from sklearn.neighbors import KNeighborsClassifier\nscores = []\nfor k in range(1, 6):\n"
+           "    knn = KNeighborsClassifier(n_neighbors=k)\n    knn.fit(X_train, y_train)\n"
+           "    scores.append(knn.score(X_test, y_test))\n"
+           "print('train', knn.score(X_train, y_train))\nprint('test', knn.score(X_test, y_test))\n")
+    (folder / "train.py").write_text("import pandas as pd\ndf = pd.read_csv('data.csv')\n" + TRAIN + knn,
+                                     encoding="utf-8")
+
+    result = convert(folder, tmp_path / "out", sandbox)
+
+    assert result.ready, result.problems
+    assert result.config["reported_metric"] == "accuracy"
+    script = (tmp_path / "out" / "train.py").read_text(encoding="utf-8")
+    assert "knn.predict(X_test)" in script  # the last evaluation, on the test rows
+    # The value is what the script itself scores: the last model's accuracy on the test rows.
+    from sklearn.model_selection import train_test_split
+    from sklearn.neighbors import KNeighborsClassifier
+    df = pd.read_csv(folder / "data.csv")
+    X_tr, X_te, y_tr, y_te = train_test_split(df[["age", "score"]], df["label"], test_size=0.25, random_state=3)
+    expected = KNeighborsClassifier(n_neighbors=5).fit(X_tr, y_tr).score(X_te, y_te)
+    assert result.config["reported_value"] == round(expected, 4)
+
+
+def test_model_score_is_measured_as_r2_for_a_regressor(tmp_path):
+    folder = tmp_path / "project"
+    folder.mkdir()
+    write_data(folder / "data.csv")
+    (folder / "train.py").write_text(
+        "import pandas as pd\nfrom sklearn.model_selection import train_test_split\n"
+        "from sklearn.linear_model import LinearRegression\ndf = pd.read_csv('data.csv')\n"
+        "X_train, X_test, y_train, y_test = train_test_split(df[['age']], df['score'], random_state=0)\n"
+        "reg = LinearRegression().fit(X_train, y_train)\nprint(reg.score(X_test, y_test))\n", encoding="utf-8")
+
+    result = convert(folder, tmp_path / "out", reported_value=0.1, target="score")
+
+    assert result.ready, result.problems
+    assert result.config["reported_metric"] == "r2"
+    assert "_out['r2']" in (tmp_path / "out" / "train.py").read_text(encoding="utf-8")
+
+
+def test_a_metric_function_wins_over_model_score(tmp_path):
+    folder = tmp_path / "project"
+    folder.mkdir()
+    write_data(folder / "data.csv")
+    (folder / "train.py").write_text("import pandas as pd\ndf = pd.read_csv('data.csv')\n" + TRAIN
+                                     + "print(model.score(X_test, y_test))\n"
+                                     + "from sklearn.metrics import f1_score\nprint(f1_score(y_test, model.predict(X_test)))\n",
+                                     encoding="utf-8")
+
+    result = convert(folder, tmp_path / "out", reported_value=0.5)
+
+    assert result.config["reported_metric"] == "f1"
+
+
+def test_removed_sklearn_modules_are_imported_from_model_selection(sandbox, tmp_path):
+    folder = tmp_path / "project"
+    folder.mkdir()
+    write_data(folder / "data.csv")
+    old = TRAIN.replace("from sklearn.model_selection import train_test_split",
+                        "from sklearn.cross_validation import train_test_split\nfrom sklearn import grid_search")
+    (folder / "train.py").write_text("import pandas as pd\ndf = pd.read_csv('data.csv')\n" + old
+                                     + "print(accuracy_score(y_test, model.predict(X_test)))\n", encoding="utf-8")
+
+    result = convert(folder, tmp_path / "out", sandbox)
+
+    script = (tmp_path / "out" / "train.py").read_text(encoding="utf-8")
+    assert result.ready, result.problems  # it ran on today's scikit-learn
+    assert "from sklearn.model_selection import train_test_split" in script
+    assert "from sklearn import model_selection as grid_search" in script
+    assert "cross_validation" not in script
+    assert any("removed in scikit-learn 0.20" in n for n in result.notes)

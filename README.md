@@ -24,7 +24,7 @@ corrected score: **0.705**.
 
 ```bash
 python -m auditor.cli demo --replay   # no API key: replays two recorded audits, opens the reports
-python -m auditor.cli demo            # live: Muse audits both projects (~4 min, ~$0.07)
+python -m auditor.cli demo            # live: Muse audits both projects (a few minutes each)
 ```
 
 Or use the local web page: pick a demo or upload your own project as a .zip, watch Muse's
@@ -126,10 +126,11 @@ more. That earlier run is reported in RESULTS.md, not hidden.
   (row counts) or `not_applicable`.
 - Check B measures dependence, not meaning. A future-derived feature whose effect is small, or
   hidden by other leaks, stays "suspected" unless the code review shows how it was built.
-- A project with many interacting flaws can use the whole budget before every fix is written.
-  On the development project used for this (a pump-failure pipeline with a dozen planted
-  flaws) the audit confirmed one flaw in each of the five families, listed three more as
-  suspected, and reported the temporal score as an upper bound instead of a corrected score.
+- A project with many interacting flaws may not get every fix written and verified within the
+  step cap. On the development project used for this (a pump-failure pipeline with a dozen
+  planted flaws), the audit confirmed one flaw in each of the five families, listed the
+  unproven ones as suspected, and reported the temporal score as an upper bound rather than a
+  corrected score (26 steps, $0.39).
 - The benchmark projects are synthetic. They test the method, not every real-world codebase.
 - Data note: with Meta Model API free credits, content sent to the model may be used by Meta for
   product improvement. The auditor sends the script, column names, a few example values and the

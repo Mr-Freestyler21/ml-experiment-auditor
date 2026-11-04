@@ -373,3 +373,31 @@ def test_removed_sklearn_modules_are_imported_from_model_selection(sandbox, tmp_
     assert "from sklearn import model_selection as grid_search" in script
     assert "cross_validation" not in script
     assert any("removed in scikit-learn 0.20" in n for n in result.notes)
+
+
+def test_renamed_sklearn_arguments_are_updated_and_the_script_runs(sandbox, tmp_path):
+    folder = tmp_path / "project"
+    folder.mkdir()
+    data = write_data(folder / "data.csv")
+    df = pd.read_csv(data)
+    df["city"] = np.where(df["age"] > 50, "north", "south")
+    df.to_csv(data, index=False)
+    (folder / "train.py").write_text(
+        "import pandas as pd\nfrom sklearn.feature_selection import RFE\nfrom sklearn.pipeline import Pipeline\n"
+        "from sklearn.preprocessing import OneHotEncoder\nfrom sklearn.compose import ColumnTransformer\n"
+        "df = pd.read_csv('data.csv')\n" + TRAIN.replace("X = df[['age', 'score']]", "X = df[['age', 'score', 'city']]")
+        .replace("model = LogisticRegression().fit(X_train, y_train)",
+                 "prep = ColumnTransformer([('cat', Pipeline([('oh', OneHotEncoder(sparse=False, handle_unknown='ignore'))]),"
+                 " ['city'])], remainder='passthrough')\n"
+                 "Xt_train, Xt_test = prep.fit_transform(X_train), prep.transform(X_test)\n"
+                 "rfe = RFE(LogisticRegression(), 2).fit(Xt_train, y_train)\n"
+                 "model = LogisticRegression().fit(rfe.transform(Xt_train), y_train)")
+        + "print(accuracy_score(y_test, model.predict(rfe.transform(Xt_test))))\n", encoding="utf-8")
+
+    result = convert(folder, tmp_path / "out", sandbox)
+
+    script = (tmp_path / "out" / "train.py").read_text(encoding="utf-8")
+    assert "OneHotEncoder(sparse_output=False, handle_unknown='ignore')" in script
+    assert "RFE(LogisticRegression(), n_features_to_select=2)" in script
+    assert result.ready, result.problems  # it ran on today's scikit-learn
+    assert any("renamed in newer scikit-learn" in n for n in result.notes)

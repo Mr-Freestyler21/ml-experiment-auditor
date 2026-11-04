@@ -20,27 +20,114 @@ race in the test set was also in the training set, separated that from the label
 alone: 0.935 with a random split, 0.721 with races kept apart), wrote a fix, and measured the
 corrected score: **0.705**.
 
-## Try it
+## How to run it
+
+### What you need
+
+- **Python 3.14** (the data library, pandas 3.0.1, has no packages for 3.15 yet) and **Git**.
+- Windows, macOS or Linux, and an internet connection for the one-time install.
+- Option 1 needs nothing else. Option 2 also needs a **Meta Model API key**.
+
+### Step 1: install (once)
+
+Windows:
 
 ```bash
-python -m auditor.cli demo --replay   # no API key: replays two recorded audits, opens the reports
-python -m auditor.cli demo            # live: Muse audits both projects (a few minutes each)
+git clone https://github.com/Mr-Freestyler21/ml-experiment-auditor.git
+cd ml-experiment-auditor
+py -3.14 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Or use the local web page: pick a demo or upload your own project as a .zip, watch Muse's
-investigation step by step, and read the report when it finishes. It runs only on your computer
-(127.0.0.1), one audit at a time.
+macOS / Linux:
 
 ```bash
-python -m auditor.cli serve           # opens http://127.0.0.1:8000
+git clone https://github.com/Mr-Freestyler21/ml-experiment-auditor.git
+cd ml-experiment-auditor
+python3.14 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-On Windows you can also double-click `start_web.bat`, or in VS Code use
-**Terminal > Run Task > ML Auditor: open web page**.
+Every command below runs from the `ml-experiment-auditor` folder with the environment active
+(your prompt starts with `(.venv)`).
 
-Or read the results directly: [F1 report](examples/f1/report.md) (confirmed) and
+### Option 1: try it without an API key
+
+Replay two real audits that were recorded live, step by step, then open their reports:
+
+```bash
+python -m auditor.cli demo --replay
+```
+
+You will see the Formula 1 project audited (verdict CONFIRMED: every test race was also in
+training; corrected accuracy 0.705 instead of 0.952) and an honest hospital project
+(verdict NOT FOUND). The HTML reports open in your browser.
+
+Or use the local web page and press **Replay recorded audit**:
+
+```bash
+python -m auditor.cli serve
+```
+
+It opens http://127.0.0.1:8000 and runs only on your computer. On Windows you can also
+double-click `start_web.bat`. Stop it with Ctrl+C in the terminal.
+
+Or just read the recorded reports: [F1 report](examples/f1/report.md) (confirmed) and
 [clean project report](examples/clean/report.md) (not found). Each folder also has a
-`report.html`: download it and open it in a browser.
+`report.html` to download and open in a browser.
+
+The recordings were made with the auditor's first version, so their reports use its earlier,
+simpler layout. A live audit (Option 2) produces the full report described in
+[How it works](#how-it-works).
+
+### Option 2: run live audits with your own Meta Model API key
+
+1. Get a key for the Meta Model API (Meta's developer platform).
+2. Create your `.env` file from the example and put the key in it:
+
+   ```bash
+   copy .env.example .env      # macOS / Linux: cp .env.example .env
+   ```
+
+   Open `.env` in a text editor and fill in the line `META_MODEL_API_KEY=your-key-here`.
+   `.env` is ignored by git, so the key never leaves your computer.
+3. Run a live audit of both demo projects in the terminal:
+
+   ```bash
+   python -m auditor.cli demo
+   ```
+
+   Or start the web page (`python -m auditor.cli serve`), pick a project and press
+   **Start live audit** to watch Muse's investigation card by card, then read the report.
+4. Audit a single project, or your own:
+
+   ```bash
+   python -m auditor.cli audit demo/f1
+   ```
+
+   Each audit writes `report.md`, `report.json` and `report.html`, with all its evidence, to
+   `runs/audit-<time>/`. To audit your own project, see
+   [Auditing your own project](#auditing-your-own-project), or upload it as a .zip on the web page.
+
+Good to know:
+- The first live audit prepares the sandbox's own Python environment, which takes a minute or two.
+  Later audits start straight away.
+- A typical audit costs about $0.05 to $0.15 of API usage, up to about $0.40 for a large, messy
+  project. Every audit is bounded by a step cap (30 model turns); `audit --max-tokens N` adds a
+  token cap.
+- The audited code runs in a temporary copy with no API keys in its environment. Your original
+  files are never changed.
+
+### If something goes wrong
+
+- `py -3.14` or `python3.14` not found: install Python 3.14 from python.org first.
+- "META_MODEL_API_KEY is not set": the `.env` file is missing, has no key, or is not in the
+  `ml-experiment-auditor` folder. Option 1 works without it.
+- "Port 8000 is already in use": an auditor page is already running. Open http://127.0.0.1:8000,
+  or start another on a different port: `python -m auditor.cli serve --port 8001`.
+- To check the installation: `python -m pytest -q` runs the test suite without any API calls.
 
 ## How it works
 
@@ -135,23 +222,6 @@ more. That earlier run is reported in RESULTS.md, not hidden.
   and it reported the temporal score (0.797) as an upper bound instead.
 - The benchmark projects are synthetic. They test the method, not every real-world codebase.
 
-## Setup
-
-Python 3.14 (pandas 3.0.1 has no wheels for 3.15 yet).
-
-```bash
-git clone https://github.com/Mr-Freestyler21/ml-experiment-auditor.git
-cd ml-experiment-auditor
-py -3.14 -m venv .venv          # macOS/Linux: python3.14 -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python -m auditor.cli demo --replay
-```
-
-For live audits, copy `.env.example` to `.env` and set `META_MODEL_API_KEY` (a Meta Model API
-key). There is no token cap by default: every audit is bounded by its step cap (30 model turns;
-a deep audit of a messy pipeline costs well under $1). `audit --max-tokens N` sets a cap.
-
 ## Commands
 
 ```bash
@@ -162,6 +232,8 @@ python -m auditor.cli demo [--replay]     # the demo
 python -m auditor.cli serve               # local web page: pick or upload a project, watch it live
 python -m pytest -q                       # tests (no API calls; the model is scripted)
 ```
+
+### Auditing your own project
 
 To audit your own project, add an `audit.yaml` next to the script (see
 [demo/f1/audit.yaml](demo/f1/audit.yaml)): the entry script, data file, target, the reported

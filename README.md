@@ -132,9 +132,6 @@ more. That earlier run is reported in RESULTS.md, not hidden.
   unproven ones as suspected, and reported the temporal score as an upper bound rather than a
   corrected score (26 steps, $0.39).
 - The benchmark projects are synthetic. They test the method, not every real-world codebase.
-- Data note: with Meta Model API free credits, content sent to the model may be used by Meta for
-  product improvement. The auditor sends the script, column names, a few example values and the
-  `prediction_time` sentence. Only audit projects you are comfortable sharing.
 
 ## Setup
 

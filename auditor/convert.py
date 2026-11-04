@@ -153,9 +153,9 @@ def convert(source: Path, out_dir: Path, sandbox: Sandbox | None = None, *, scri
                                 "change with --script")
 
     code = _remove_plotting(code, result)
+    code = _modernise_imports(code, result)
     if entry.suffix == ".ipynb":
         code = _tidy_cells(code)
-    code = _modernise_imports(code, result)
     out_dir.mkdir(parents=True, exist_ok=True)
     tree = ast.parse(code)
     constants = {**_imported_constants(tree, root, entry), **_string_constants(tree)}
@@ -403,40 +403,6 @@ def _modernise_imports(code: str, result: ConversionResult) -> str:
         result.notes.append(f"Updated imports of {names} (removed in scikit-learn 0.20) to sklearn.model_selection, "
                             "where the same functions live now; old-style calls such as KFold(n, n_folds=...) are "
                             "not translated")
-    return _modernise_arguments(code, result)
-
-
-def _modernise_arguments(code: str, result: ConversionResult) -> str:
-    """Two renamed arguments common in older tutorials, same meaning in today's scikit-learn:
-    OneHotEncoder(sparse=...) became sparse_output (1.4), and RFE's feature count must be passed
-    by name (1.0): RFE(model, 10) -> RFE(model, n_features_to_select=10)."""
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return code  # notebook leftovers not tidied yet; nothing to translate safely
-    edits = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        name = _call_name(node)
-        if name == "OneHotEncoder" and any(k.arg == "sparse" for k in node.keywords):
-            parts = [_segment(code, a) for a in node.args]
-            parts += [("sparse_output" if k.arg == "sparse" else k.arg) + "=" + _segment(code, k.value)
-                      if k.arg else "**" + _segment(code, k.value) for k in node.keywords]
-            edits.append((node, f"{_segment(code, node.func)}({', '.join(parts)})", "OneHotEncoder(sparse=...)"))
-        elif name == "RFE" and len(node.args) >= 2 and not any(isinstance(a, ast.Starred) for a in node.args):
-            parts = [_segment(code, node.args[0]), "n_features_to_select=" + _segment(code, node.args[1])]
-            if len(node.args) >= 3:
-                parts.append("step=" + _segment(code, node.args[2]))
-            parts += [f"{k.arg}={_segment(code, k.value)}" if k.arg else "**" + _segment(code, k.value)
-                      for k in node.keywords]
-            edits.append((node, f"{_segment(code, node.func)}({', '.join(parts)})", "RFE(model, n)"))
-    for node, text, what in sorted(edits, key=lambda e: (e[0].lineno, e[0].col_offset), reverse=True):
-        code = _replace_segment(code, node, text)
-    if edits:
-        kinds = ", ".join(dict.fromkeys(what for _, _, what in sorted(edits, key=lambda e: e[0].lineno)))
-        result.notes.append(f"Updated {len(edits)} call(s) using arguments renamed in newer scikit-learn ({kinds}); "
-                            "the meaning is unchanged")
     return code
 
 

@@ -167,7 +167,7 @@ details pre { background: var(--code-bg); padding: 8px; border-radius: 6px; over
     return fetch("/api/projects").then(function (r) { return r.json(); }).then(function (data) {
       state.projects = data.projects;
       $("keynote").textContent = data.has_key
-        ? "Live audits call the Meta Model API (about $0.03 to $0.05 each)."
+        ? "Live audits call the Meta Model API (usually about $0.05 to $0.15 each; up to about $0.40 for a large, messy project)."
         : "No META_MODEL_API_KEY in .env: live audits are off. Replay works without a key.";
       $("run").dataset.haskey = data.has_key ? "1" : "";
       var list = $("projects");

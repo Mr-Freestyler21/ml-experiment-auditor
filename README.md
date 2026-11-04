@@ -126,11 +126,13 @@ more. That earlier run is reported in RESULTS.md, not hidden.
   (row counts) or `not_applicable`.
 - Check B measures dependence, not meaning. A future-derived feature whose effect is small, or
   hidden by other leaks, stays "suspected" unless the code review shows how it was built.
-- A project with many interacting flaws may not get every fix written and verified within the
-  step cap. On the development project used for this (a pump-failure pipeline with a dozen
-  planted flaws), the audit confirmed one flaw in each of the five families, listed the
-  unproven ones as suspected, and reported the temporal score as an upper bound rather than a
-  corrected score (26 steps, $0.39).
+- A project with many interacting flaws is hard to correct fully within the step cap. On the
+  development project used for this (a pump-failure pipeline with a dozen planted flaws, reported
+  F1 0.968, honest F1 0.591 by its author's answer key), the audit confirmed one flaw in each of
+  the five families, fixed both the training and the data-preparation script, and measured a
+  corrected F1 of 0.632: close, and still slightly optimistic because not every flaw was fixed
+  (20 steps, $0.37). Runs vary: another run confirmed the same flaws, but its last fix crashed,
+  and it reported the temporal score (0.797) as an upper bound instead.
 - The benchmark projects are synthetic. They test the method, not every real-world codebase.
 
 ## Setup

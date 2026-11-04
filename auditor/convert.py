@@ -249,7 +249,7 @@ def _training_files(root: Path) -> list[Path]:
         rel = path.relative_to(root)
         if path.suffix not in (".py", ".ipynb") or SKIP_SOURCE_DIRS.intersection(rel.parts):
             continue
-        text = _code_text(path)
+        text = _searchable_text(path)
         if ".fit(" in text and any(f"{name}(" in text for name in [*METRICS, ".score"]):
             found.append(path)
     return found
@@ -280,6 +280,15 @@ def _code_text(path: Path) -> str:
     if path.suffix == ".ipynb":
         return "\n".join(_notebook_code_cells(path))
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _searchable_text(path: Path) -> str:
+    """Code text for searching a folder: a file that cannot be read (an empty or broken notebook)
+    is skipped instead of stopping the conversion. Converting it directly still reports why."""
+    try:
+        return _code_text(path)
+    except ConvertError:
+        return ""
 
 
 def _notebook_code_cells(path: Path) -> list[str]:
@@ -495,7 +504,7 @@ def _columns(path: Path) -> list[str]:
 
 
 def _project_code(root: Path) -> str:
-    return "\n".join(_code_text(p) for p in sorted(root.rglob("*"))
+    return "\n".join(_searchable_text(p) for p in sorted(root.rglob("*"))
                      if p.suffix in (".py", ".ipynb") and not SKIP_SOURCE_DIRS.intersection(p.relative_to(root).parts))
 
 

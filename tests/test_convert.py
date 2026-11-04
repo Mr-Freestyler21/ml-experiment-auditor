@@ -271,3 +271,26 @@ def test_folder_with_several_training_scripts_asks_which(tmp_path):
 
     with pytest.raises(ConvertError, match="--script"):
         convert(folder, tmp_path / "out")
+
+
+def test_an_empty_notebook_in_a_folder_is_skipped(tmp_path):
+    folder = tmp_path / "project"
+    (folder / "notebooks").mkdir(parents=True)
+    (folder / "notebooks" / "eda.ipynb").write_text("", encoding="utf-8")  # 0 bytes, as in real repos
+    write_data(folder / "laps.csv")
+    (folder / "train.py").write_text("import pandas as pd\ndf = pd.read_csv('laps.csv')\n" + TRAIN
+                                     + "print(accuracy_score(y_test, model.predict(X_test)))\n", encoding="utf-8")
+
+    result = convert(folder, tmp_path / "out", reported_value=0.8)
+
+    assert result.ready, result.problems
+
+
+def test_an_empty_notebook_given_directly_is_explained(tmp_path):
+    from auditor.convert import ConvertError
+
+    notebook = tmp_path / "eda.ipynb"
+    notebook.write_text("", encoding="utf-8")
+
+    with pytest.raises(ConvertError, match="not a readable notebook"):
+        convert(notebook, tmp_path / "out", reported_value=0.8)
